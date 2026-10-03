@@ -1,0 +1,13 @@
+{
+  "name": "2d-webgpu-showcase",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An interactive, explained showcase of 2D rendering effects for games — WebGPU first, with WebGL2 versions where possible.",
+  "type": "module",
+  "scripts": {
+    "dev": "node tools/serve.mjs 8080",
+    "check": "node tools/check.mjs",
+    "check:fast": "node tools/check.mjs --first --quiet"
+  },
+  "devDependencies": {}
+}
