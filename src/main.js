@@ -141,7 +141,6 @@ async function route() {
   markActive();
   if (r.view !== 'scene') {
     stage?.unload();
-    stage = null;
     current = null;
     updateApiButtons(null);
     if (r.view === 'guide') {

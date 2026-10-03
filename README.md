@@ -1,0 +1,82 @@
+# 2D GPU Showcase — WebGPU & WebGL2
+
+An interactive, explained catalogue of **what modern GPUs can do for 2D games and graphics**:
+shaders, lighting, particles, simulations, post-processing and popular art styles — every scene
+with live sliders, several examples (abstract **and** in-game / real-life), and a plain-English
+explanation of what you're seeing, how it works, where games use it, and the words to use when
+you **ask for it**.
+
+- **WebGPU first.** Compute shaders, storage buffers and atomics power the particle systems,
+  fluid / sand / slime simulations, boids, N-body galaxies and more.
+- **WebGL2 too.** Every fragment-shader scene is written once in WGSL and automatically
+  translated to GLSL, so it also runs on WebGL2 — flip the API switch in the top bar to compare.
+  Scenes that need compute are clearly marked.
+- **No build step, no dependencies, no image files.** Plain ES modules; all art (pixel-art
+  sprites, tiles, normal maps, a procedural platformer scene) is generated in code.
+
+## Run it
+
+```bash
+node tools/serve.mjs        # → http://localhost:8080
+# or any static server, e.g. `npx serve .`
+```
+
+WebGPU needs a secure context — `http://localhost` counts. Use a recent Chrome / Edge,
+Safari 26+, or Firefox 141+. Browsers without WebGPU automatically use the WebGL2 versions
+where they exist.
+
+**GitHub Pages:** Settings → Pages → *Deploy from a branch* → pick this branch and `/ (root)`.
+(The `.nojekyll` file is required so files starting with `_` are served.)
+
+## What's inside
+
+| Category | Scenes |
+|---|---|
+| **Start Here** | How a GPU draws 2D · Shaders 101 · Compute shaders vs CPU |
+| **Shapes, Lines & Color** | SDFs · gradients & color spaces · lines & Bézier curves · blend modes · anti-aliasing & pixel scaling · game UI · SDF text |
+| **Procedural Generation** | noise · fBm & domain warping · Voronoi · terrain/world generation · patterns & tiling · fractals |
+| **Sprites, Tiles & Cameras** | sprite batching & instancing · sprite animation & atlases · GPU tilemaps · parallax · 2D cameras & screen shake · sprite shader effects · isometric |
+| **Lighting & Shadows** | 2D lights & normal maps · shadows & line of sight · 2D global illumination · bloom · god rays · fog of war · day/night |
+| **Particles & VFX** | GPU particle systems · fire (3 ways) · weather · trails & slashes · lightning · explosions & game feel |
+| **GPU Simulations** | boids · fluids · reaction–diffusion · cellular automata · falling sand · slime mold · water ripples · Verlet ropes & cloth · N-body · metaballs · jump flooding |
+| **Post-Processing** | blur · color grading & film look · distortion · chromatic aberration & glitch · convolution & edges · screen transitions · feedback trails |
+| **Art Styles** | pixel art · dithering & 1-bit · CRT/VHS · neon & synthwave · comic & cel · painterly · ASCII · silhouette · low-poly · hand-drawn · holographic foil |
+| **Pseudo-3D & Tricks** | Mode 7 · raycasting · pseudo-3D road · 2D water · grass & wind · destructible terrain · render targets & portals · masks & stencils |
+
+The **Field Guide** page (`#/guide`) collects a glossary plus every “ask for it” phrase.
+
+## How it's built
+
+```
+index.html, src/main.js        app shell: routing, sidebar, controls, explanation panel
+src/ui/                        controls builder, explanation renderer, home & guide pages, CSS
+src/core/stage.js              per-scene canvas, context, frame loop, input, errors, FPS
+src/core/webgpu.js             SceneGPU: buffers, targets, samplers, declarative bindings, fullscreen & compute passes
+src/core/webgl2.js             GLKit: the WebGL2 mirror (programs, UBOs, FBOs, fullscreen passes)
+src/core/wgsl2glsl.js          portable-WGSL → GLSL ES 3.00 translator (with type inference)
+src/core/shaderscene.js        shaderScene(): Shadertoy-style multi-pass scenes on BOTH APIs
+src/core/shaderlib.js          shared shader libraries: hash, noise, SDF, color, dithering
+src/core/batch.js              Camera2D, ShapeBatch (SDF shapes w/ glow), SpriteBatch (instanced sprites)
+src/core/assets.js             procedural pixel-art atlas + normal maps + classic palettes
+src/core/gamescene.js          an animated procedural platformer scene used as input for filters
+src/scenes/registry.js         every scene, lazily imported
+src/scenes/<category>/*.js     the scenes
+tools/serve.mjs                zero-dependency static server
+tools/check.mjs                headless test harness (every scene × example × API)
+```
+
+Writing a new scene? Read **[AUTHORING.md](AUTHORING.md)** — the scene contract, the helpers,
+the portable-WGSL rules and the WebGPU gotchas.
+
+## Testing
+
+```bash
+node tools/check.mjs                 # every scene, every example, both APIs
+node tools/check.mjs noise bloom     # specific scenes
+node tools/check.mjs --category=post --first --shots
+```
+
+The harness runs headless Chromium on a software GPU (SwiftShader), drags the mouse across each
+canvas, and fails on WGSL/GLSL compile errors, WebGPU validation errors, JS exceptions or blank
+output. `--shots` saves screenshots to `tools/out/`. It needs Playwright (`npm i -D playwright`
+if it isn't installed globally).
