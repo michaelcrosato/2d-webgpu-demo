@@ -54,6 +54,26 @@ const list = await (async () => {
   return l.filter((s) => !ids.length || ids.includes(s.id));
 })();
 
+// Which example tab makes the most representative thumbnail (default: the first tab).
+const PICK = {
+  transitions: 'pixel',
+  'jump-flood': 'outline',
+  'trails-ribbons': 'slash',
+  nbody: 'solar',
+  'sdf-text': 'title',
+  'fog-of-war': 'soft',
+  distortion: 'blackhole',
+  'color-grading': 'moods',
+  'edge-detection': 'vision',
+  blur: 'tiltshift',
+  'chromatic-glitch': 'glitch',
+  'feedback-trails': 'dream',
+  'gpu-particles': 'fireworks',
+  'compute-power': 'vortex',
+  'god-rays': 'window',
+  'masking-stencil': 'xray',
+};
+
 let i = 0;
 const results = [];
 async function worker() {
@@ -61,7 +81,7 @@ async function worker() {
   for (;;) {
     const s = list[i++];
     if (!s) break;
-    const ex = s.thumbEx || s.ex;
+    const ex = PICK[s.id] || s.thumbEx || s.ex;
     const useApi = s.backends.includes(api) ? api : s.backends[0];
     const url = `${base}?r=${i}#/s/${s.id}?api=${useApi}${ex ? `&ex=${ex}` : ''}&test=1`;
     try {
