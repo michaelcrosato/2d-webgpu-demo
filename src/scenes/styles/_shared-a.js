@@ -112,7 +112,8 @@ fn toLab(c: vec3f) -> vec3f { return linearToOklab(srgbToLinear(clamp(c, vec3f(0
 fn palDither(c: vec3f, thr: f32, amt: f32) -> vec3f {
   let th: f32 = mix(0.5, thr, amt);
   if (u.chromaW < 0.5) {
-    let l: f32 = clamp(toLab(c).x, 0.0, 1.0);   // perceptual lightness
+    // perceptual lightness, stretched: real images rarely use OKLab L below 0.25, so spread 0.25..0.9 over the ramp
+    let l: f32 = clamp((toLab(c).x - 0.25) / 0.65, 0.0, 1.0);
     let idx: i32 = i32(clamp(floor(l * (u.palN - 1.0) + th), 0.0, u.palN - 1.0));
     return u.pal[idx].xyz;
   }
