@@ -63,7 +63,7 @@ fn presetMat(px: vec2f) -> vec4f {
     if (q.y > lavaY) {
       let f = fbm(vec2f(q.x * 7.0 - t * 0.35, q.y * 16.0 + t * 0.1), 3) * 0.5 + 0.5;
       let crust = smoothstep(0.45, 0.6, f);
-      m = mLight(mix(vec3f(3.2, 0.9, 0.12), vec3f(0.5, 0.08, 0.02), crust) * (0.9 + 0.15 * sin(t * 2.0 + q.x * 4.0)));
+      m = mLight(mix(vec3f(2.0, 0.55, 0.08), vec3f(0.35, 0.06, 0.015), crust) * (0.9 + 0.15 * sin(t * 2.0 + q.x * 4.0)));
     }
     return m;
   }

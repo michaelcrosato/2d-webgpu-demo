@@ -27,7 +27,8 @@ export default {
   // kind is a small label: 'Abstract' | 'In a game' | 'Real life' | 'Classic' | 'Comparison' | 'Step 1' …
   examples: [
     { id: 'abstract', label: 'Raw noise', kind: 'Abstract', note: 'HTML shown above the explanation when selected.' },
-    { id: 'terrain', label: 'Terrain map', kind: 'In a game', note: '…', params: { scale: 3 } /* preset values */ },
+    { id: 'terrain', label: 'Terrain map', kind: 'In a game', note: '…', params: { scale: 3 } /* preset values */,
+      hint: 'Per-example interaction hint (overrides `interaction` while this tab is selected).' },
   ],
 
   // sliders etc. `key` becomes ctx.params[key]. `help` is shown under the control (keep it short).
@@ -239,6 +240,8 @@ Blend presets (`blend:` option): `'alpha' 'premultiplied' 'additive' (src-alpha,
 10. Every generated module starts with `diagnostic(off, derivative_uniformity);` so `fwidth`/`textureSample` in branches compile.
 11. Keep heavy work proportional to `ctx.testMode` (the test harness uses a slow software GPU).
 12. When `ctx.paused`, skip simulation steps but still draw.
+14. Very large shaders compile and run slowly (especially on software GPUs): a big helper called from several places is
+    inlined at every call site. Give heavy functions a single call site (e.g. inside a loop) and keep per-example branches lean.
 13. Heavy `workgroupBarrier()` + workgroup-atomic patterns are fine on real GPUs but crawl on the harness's software GPU;
     prefer simple global atomics or reduce the work under `ctx.testMode`.
 

@@ -84,7 +84,7 @@ function shadeHex(h, k) {
 /** Pixel painter on a small canvas. */
 function painter(w, h) {
   const c = makeCanvas(w, h);
-  const g = c.getContext('2d');
+  const g = c.getContext('2d', { willReadFrequently: true });
   g.imageSmoothingEnabled = false;
   const api = {
     c,
@@ -867,7 +867,7 @@ function buildAtlas() {
   const H = Math.pow(2, Math.ceil(Math.log2(y + shelf + PAD)));
   const canvas = makeCanvas(W, H);
   const normalCanvas = makeCanvas(W, H);
-  const g = canvas.getContext('2d');
+  const g = canvas.getContext('2d', { willReadFrequently: true });
   const ng = normalCanvas.getContext('2d');
   g.imageSmoothingEnabled = false;
   ng.imageSmoothingEnabled = false;

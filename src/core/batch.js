@@ -12,7 +12,9 @@
 //   }
 //
 // Several flushes per frame are fine (e.g. one with 'alpha' blending, one 'additive').
-// Call begin() once per frame before the first draw.
+// Call begin() ONCE per frame before the first draw — calling it again between flushes in the same
+// frame rewinds the instance buffer and overwrites data that earlier flushes still reference.
+// Shapes output straight (non-premultiplied) alpha.
 
 import { BLEND } from './webgpu.js';
 import { hexToRgb } from './uniforms.js';

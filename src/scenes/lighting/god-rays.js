@@ -252,7 +252,7 @@ export default shaderScene({
       label: 'Underwater',
       kind: 'In a game',
       note: 'The bright, rippling water surface is the light source; kelp, fish and a boat hull cut it into shafts that wave with the surface. The light sits above the screen — radial blur works with off-screen lights too.',
-      params: { samples: 64, density: 1.0, decay: 0.975, weight: 0.08, exposure: 1.3, tint: '#a6ecff', view: 'final' },
+      params: { samples: 64, density: 1.0, decay: 0.97, weight: 0.06, exposure: 0.75, tint: '#a6ecff', view: 'final' },
     },
     {
       id: 'mask',

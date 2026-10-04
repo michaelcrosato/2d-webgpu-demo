@@ -250,7 +250,6 @@ fn age(c: u32) -> u32 {
 
 // --- reactions between the cells of a block
 fn react(q: ptr<function, array<u32, 4>>) {
-  if (u.time > -1.0) { return; }
   for (var i = 0u; i < 4u; i++) {
     for (var j = 0u; j < 4u; j++) {
       if (i == j) { continue; }
@@ -291,6 +290,28 @@ fn flowChance(m: u32) -> f32 {
   if (m == STEAM || m == SMOKE) { return 0.45; }
   if (m == FIRE) { return 0.3; }
   return 0.0;
+}
+
+// sideways flow inside one row of the block (l = row, r = row + 1)
+fn flowRow(q: ptr<function, array<u32, 4>>, l: u32, supL: bool, supR: bool) {
+  let r = l + 1u;
+  let cl = (*q)[l];
+  let cr = (*q)[r];
+  let ml = matOf(cl);
+  let mr = matOf(cr);
+  let wantR = (isGas(ml) || (isLiquid(ml) && supL)) && (flagsOf(cl) & 1u) == 1u;
+  let wantL = (isGas(mr) || (isLiquid(mr) && supR)) && (flagsOf(cr) & 1u) == 0u;
+  if (wantR && movable(mr) && density(mr) < density(ml) && rnd() < flowChance(ml)) {
+    (*q)[l] = cr;
+    (*q)[r] = cl;
+  } else if (wantL && movable(ml) && density(ml) < density(mr) && rnd() < flowChance(mr)) {
+    (*q)[l] = cr;
+    (*q)[r] = cl;
+  } else {
+    // blocked: maybe turn around
+    if (wantR && rnd() < 0.5) { (*q)[l] = cl ^ (1u << 24u); }
+    if (wantL && rnd() < 0.5) { (*q)[r] = cr ^ (1u << 24u); }
+  }
 }
 
 @compute @workgroup_size(8, 8) fn blockStep(@builtin(global_invocation_id) gid: vec3u) {
@@ -341,31 +362,14 @@ fn flowChance(m: u32) -> f32 {
   //    Liquids only flow when supported (the cell below is not lighter) — otherwise they fall.
   //    (For the bottom row the cell below lies in another block: reading it is a harmless,
   //    read-only peek; only this thread ever writes the four cells of this block.)
-  let under = array<u32, 2>(matOf(load(p2 + vec2i(0, 1))), matOf(load(p3 + vec2i(0, 1))));
-  for (var row = 0u; row < 4u; row = row + 2u) {
-    let l = row;
-    let r = row + 1u;
-    let ml = matOf(q[l]);
-    let mr = matOf(q[r]);
-    var supL = true;
-    var supR = true;
-    if (row == 0u) {
-      supL = !movable(matOf(q[2])) || density(matOf(q[2])) >= density(ml);
-      supR = !movable(matOf(q[3])) || density(matOf(q[3])) >= density(mr);
-    } else {
-      supL = !movable(under[0]) || density(under[0]) >= density(ml);
-      supR = !movable(under[1]) || density(under[1]) >= density(mr);
-    }
-    // left cell wants to go right?
-    if ((isGas(ml) || (isLiquid(ml) && supL)) && (flagsOf(q[l]) & 1u) == 1u) {
-      if (movable(mr) && density(mr) < density(ml) && rnd() < flowChance(ml)) { swapQ(&q, l, r); continue; }
-      else if (rnd() < 0.5) { q[l] = q[l] ^ (1u << 24u); }
-    }
-    if ((isGas(mr) || (isLiquid(mr) && supR)) && (flagsOf(q[r]) & 1u) == 0u) {
-      if (movable(ml) && density(ml) < density(mr) && rnd() < flowChance(mr)) { swapQ(&q, l, r); }
-      else if (rnd() < 0.5) { q[r] = q[r] ^ (1u << 24u); }
-    }
-  }
+  let u0 = matOf(load(p2 + vec2i(0, 1)));
+  let u1 = matOf(load(p3 + vec2i(0, 1)));
+  let supT0 = !movable(matOf(q[2])) || density(matOf(q[2])) >= density(matOf(q[0]));
+  let supT1 = !movable(matOf(q[3])) || density(matOf(q[3])) >= density(matOf(q[1]));
+  flowRow(&q, 0u, supT0, supT1);
+  let supB0 = !movable(u0) || density(u0) >= density(matOf(q[2]));
+  let supB1 = !movable(u1) || density(u1) >= density(matOf(q[3]));
+  flowRow(&q, 2u, supB0, supB1);
   if (q[0] != OUTSIDE) { store(p0, q[0]); }
   if (q[1] != OUTSIDE) { store(p1, q[1]); }
   if (q[2] != OUTSIDE) { store(p2, q[2]); }
