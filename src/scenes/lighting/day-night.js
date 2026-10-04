@@ -182,10 +182,10 @@ fn house(q: vec2f, pw: f32) -> vec4f {
   let h1: vec3f = hash13(id + 3.0);
   let cx: f32 = (id + 0.5) * 0.17 + (h1.x - 0.5) * 0.02;
   let hw: f32 = 0.05 + 0.025 * h1.y;
-  let hh: f32 = 0.06 + 0.07 * h1.z;
+  let hh: f32 = 0.035 + 0.04 * h1.z;
   let p: vec2f = q - vec2f(cx, BASE - hh);
   let facade: f32 = sdBox(p, vec2f(hw, hh));
-  let roofH: f32 = 0.035 + 0.03 * h1.x;
+  let roofH: f32 = 0.03 + 0.025 * h1.x;
   let roof: f32 = sdTriangle(q, vec2f(cx - hw - 0.012, BASE - 2.0 * hh), vec2f(cx + hw + 0.012, BASE - 2.0 * hh), vec2f(cx, BASE - 2.0 * hh - roofH));
   let chim: f32 = sdBox(q - vec2f(cx + hw * 0.55, BASE - 2.0 * hh - roofH * 0.6), vec2f(0.007, roofH * 0.45));
   // windows on a grid inside the facade
@@ -303,7 +303,7 @@ fn shade(uv: vec2f, tpx: vec2f) -> vec4f {
       let h1: vec3f = hash13(id + 3.0);
       let cx: f32 = (id + 0.5) * 0.17 + (h1.x - 0.5) * 0.02;
       let hw: f32 = 0.05 + 0.025 * h1.y;
-      let hh: f32 = 0.06 + 0.07 * h1.z;
+      let hh: f32 = 0.035 + 0.04 * h1.z;
       let tip: vec2f = vsh * (hh * 2.0 / 0.12);
       let a: vec2f = vec2f(cx - hw, BASE);
       let b: vec2f = vec2f(cx + hw, BASE);
@@ -352,10 +352,17 @@ fn shade(uv: vec2f, tpx: vec2f) -> vec4f {
     var fol: vec3f = u.foliage * (0.75 + 0.35 * fbm(q * 40.0, 2));
     if (u.blossom > 0.5) { fol = mix(fol, vec3f(1.0, 0.72, 0.82), step(0.62, valueNoise(q * 140.0))); }
     if (u.snow > 0.5) {
-      // bare branches with a dusting of snow
-      let br: f32 = abs(fract((q.x - cc.x) * 70.0 + (q.y - cc.y) * 40.0) - 0.5);
-      crown = max(crown, (br - 0.12) * 0.02);
-      fol = mix(vec3f(0.3, 0.24, 0.2), vec3f(0.95), step(0.3, (cc.y - q.y) / tr.z + 0.25));
+      // winter: bare branches instead of a leafy crown
+      var bd: f32 = 1.0;
+      for (var k = 0; k < 5; k++) {
+        let fk: f32 = f32(k);
+        let ang: f32 = -1.1 + fk * 0.55 + 0.15 * sin(fi * 3.0 + fk);
+        let st: vec2f = tr.xy - vec2f(0.0, tr.z * (0.45 + 0.05 * fk));
+        let en: vec2f = st + vec2f(sin(ang), -cos(ang)) * tr.z * (0.45 - 0.05 * abs(fk - 2.0));
+        bd = min(bd, sdSegment(q, st, en) - 0.0025);
+      }
+      crown = bd;
+      fol = vec3f(0.32, 0.26, 0.22);
     }
     let lightDir: f32 = clamp((q.x - cc.x) * sign(u.sunPos.x / A - cc.x) / (tr.z * 0.42) * 0.5 + 0.5, 0.0, 1.0);
     col = mix(col, fol * (amb + u.sunCol * 0.3 * sunUp * lightDir), dn_aa(crown, pw));
