@@ -335,12 +335,12 @@ fn exHex(px: vec2f) -> vec3f {
 // the "object" inside the kaleidoscope: drifting pieces of colored glass and sticks on a dark field
 fn beads(p: vec2f, t: f32) -> vec3f {
   let n = fbm(p * 1.2 + vec2f(t * 0.05, -t * 0.03), 3);
-  var c = vec3f(0.02, 0.015, 0.05) + palette(n * 0.6 + t * 0.02, vec3f(0.5, 0.45, 0.55), vec3f(0.4, 0.35, 0.35), vec3f(1.0, 1.0, 1.0), vec3f(0.0, 0.33, 0.67)) * 0.1;
-  for (var i = 0; i < 14; i++) {
+  var c = vec3f(0.02, 0.015, 0.05) + palette(n * 0.6 + t * 0.02, vec3f(0.5, 0.45, 0.55), vec3f(0.4, 0.35, 0.35), vec3f(1.0, 1.0, 1.0), vec3f(0.0, 0.33, 0.67)) * 0.3;
+  for (var i = 0; i < 22; i++) {
     let fi = f32(i);
     let h = hash13(fi + 7.0);
-    let pos = vec2f(sin(t * (0.12 + h.x * 0.25) + fi * 1.7), cos(t * (0.1 + h.y * 0.2) + fi * 2.3)) * 1.05;
-    let rad = 0.1 + 0.17 * h.z;
+    let pos = vec2f(sin(t * (0.12 + h.x * 0.25) + fi * 1.7), cos(t * (0.1 + h.y * 0.2) + fi * 2.3)) * (0.35 + 0.6 * h.y);
+    let rad = 0.12 + 0.2 * h.z;
     let q = rot2(t * (h.y - 0.5) * 1.5 + fi) * (p - pos);
     var d = length(q) - rad;
     if (i % 3 == 1) { d = sdEquilateralTriangle(q, rad * 0.9); }
@@ -463,7 +463,7 @@ export default shaderScene({
     { type: 'slider', key: 'range', label: 'Movement range', min: 0, max: 6, step: 1, value: 2, showFor: ['hex'], help: 'Hexes with distance ≤ range from the hovered hex.' },
     { type: 'toggle', key: 'showCoords', label: 'Color by axial coordinates', value: false, showFor: ['hex'], help: 'Debug view: hue from q, r and s; the three axes (q=0, r=0, s=0) are highlighted.' },
     { type: 'slider', key: 'segments', label: 'Mirror segments', min: 2, max: 16, step: 1, value: 6, showFor: ['kaleido'], help: 'Number of wedge pairs around the circle.' },
-    { type: 'slider', key: 'kzoom', label: 'Zoom', min: 0.5, max: 4, step: 0.01, value: 1.4, showFor: ['kaleido'], help: 'How much of the source image each wedge shows.' },
+    { type: 'slider', key: 'kzoom', label: 'Zoom', min: 0.5, max: 4, step: 0.01, value: 1.0, showFor: ['kaleido'], help: 'How much of the source image each wedge shows.' },
     { type: 'toggle', key: 'showSource', label: 'Show source & wedge', value: true, showFor: ['kaleido'] },
     { type: 'slider', key: 'spin', label: 'Animation speed', min: 0, max: 3, step: 0.01, value: 1, showFor: ['repeat', 'truchet', 'kaleido'] },
     { type: 'slider', key: 'seed', label: 'Seed', min: 0, max: 99, step: 1, value: 0, showFor: ['truchet', 'hex'] },
