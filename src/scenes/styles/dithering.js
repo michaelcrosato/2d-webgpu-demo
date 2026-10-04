@@ -429,7 +429,8 @@ let q = floor(c * levels + vec3f(thr)) / levels;     // instead of floor(c * lev
     ],
     links: [
       { title: 'Lucas Pope — Obra Dinn dithering devlog', url: 'https://forums.tigsource.com/index.php?topic=40832.msg1363742#msg1363742', note: 'how the 1-bit look was stabilized' },
-      { title: 'Ulichney’s void-and-cluster method', url: 'https://en.wikipedia.org/wiki/Ordered_dithering', note: 'ordered dithering & blue noise overview' },
+      { title: 'Ordered dithering (Wikipedia)', url: 'https://en.wikipedia.org/wiki/Ordered_dithering', note: 'Bayer matrices and threshold maps' },
+      { title: 'Floyd–Steinberg dithering (Wikipedia)', url: 'https://en.wikipedia.org/wiki/Floyd%E2%80%93Steinberg_dithering', note: 'the classic error-diffusion kernel' },
     ],
   },
 });

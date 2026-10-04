@@ -139,6 +139,9 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
   - `iterations`: number, param key, or `(params) => n` — run the pass several times per frame (sim speed).
   - Initialise state when `u.frame < 0.5` (first frame after start/reset/resize). The ↻ button and `reset` buttons clear buffers.
   - Passes do not run while paused (the final image still does).
+- With `renderScale < 1`, the final `shade()` runs on the smaller target: `px` is in **low-res** pixels while
+  `u.resolution` stays the canvas size. Use `uv` (or `uv * u.resolution`) for layout math; use `px` when you want
+  per-low-res-pixel effects (e.g. ordered dithering on the big pixels).
 - `input: 'game'` gives you `game`, an animated 2D platformer scene (sky, parallax mountains, trees, tiles, coins, torches, a hopping hero).
   Perfect raw material for post-processing and style filters.
 
@@ -236,6 +239,8 @@ Blend presets (`blend:` option): `'alpha' 'premultiplied' 'additive' (src-alpha,
 10. Every generated module starts with `diagnostic(off, derivative_uniformity);` so `fwidth`/`textureSample` in branches compile.
 11. Keep heavy work proportional to `ctx.testMode` (the test harness uses a slow software GPU).
 12. When `ctx.paused`, skip simulation steps but still draw.
+13. Heavy `workgroupBarrier()` + workgroup-atomic patterns are fine on real GPUs but crawl on the harness's software GPU;
+    prefer simple global atomics or reduce the work under `ctx.testMode`.
 
 ---
 

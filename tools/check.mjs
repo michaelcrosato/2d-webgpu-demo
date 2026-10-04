@@ -133,7 +133,7 @@ for (const s of targets) {
           detail += errors.join('\n') + '\n';
         }
         const el = page.locator('.stage-canvas');
-        const png = await el.screenshot({ timeout: 15000 });
+        const png = await el.screenshot({ timeout });
         if (shots) fs.writeFileSync(path.join(here, 'out', `${s.id}__${ex || 'main'}__${api}.png`), png);
         stats = await page.evaluate(async (b64) => {
           const blob = await (await fetch(`data:image/png;base64,${b64}`)).blob();

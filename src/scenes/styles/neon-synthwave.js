@@ -589,8 +589,8 @@ export default shaderScene({
         centre line (segments, arcs, rounded boxes…).</li>
       <li><b>Neon = core + halo.</b> A thin, almost-white core where <code>d &lt; width</code>, plus colored light that falls off with distance:
         <code>exp(-d / r)</code> for a tight glow and a second, wider <code>exp(-d / 4r)</code> for the bloom. Values are <i>added</i> — light adds up.</li>
-      <li><b>Roll-off.</b> Adding lights easily exceeds 1.0, so a soft tone curve (<code>1 − exp(−c)</code>) turns overlapping cores white instead
-        of clipping to flat color — the hot-core look of real neon.</li>
+      <li><b>Roll-off.</b> Adding lights easily exceeds 1.0. A soft shoulder (linear up to 0.75, then an exponential approach to 1) plus a
+        desaturation of very hot pixels turns overlapping cores white instead of clipping to flat color — the hot-core look of real neon.</li>
       <li><b>Perspective grid.</b> For floor pixels, depth = <code>k / (y − horizon)</code>; world x = screen x × depth. Grid lines are where
         <code>fract(world)</code> is near 0; <code>fwidth()</code> anti-aliases them and fades far rows to their average so the horizon doesn’t shimmer.
         Adding time to world z scrolls it.</li>
@@ -625,7 +625,7 @@ export default shaderScene({
       With WebGPU you would keep that state in storage buffers updated by a compute shader — thousands of enemies and particles with no CPU work.</p>`,
     code: [
       {
-        title: 'A neon stroke: white core + two-radius halo',
+        title: 'A neon stroke: white core + two-radius halo, then a soft shoulder',
         lang: 'wgsl',
         src: `fn neonLine(d: f32, col: vec3f, width: f32) -> vec3f {
   let aa = pxSize() * 1.2;
@@ -634,7 +634,13 @@ export default shaderScene({
   let halo = exp(-d / r) * 0.55 + exp(-d / (r * 4.0)) * 0.22; // tight + wide glow
   return mix(col, vec3f(1.0), 0.55) * core + col * halo * u.glow;
 }
-// later: c = vec3f(1.0) - exp(-c * 1.15);   // soft roll-off, hot cores turn white`,
+fn softClip(c: vec3f) -> vec3f {        // applied to the final color
+  let k = 0.75;
+  let over = max(c - vec3f(k), vec3f(0.0));
+  let rolled = vec3f(k) + (1.0 - k) * (vec3f(1.0) - exp(-over / (1.0 - k)));
+  let lum = max(max(c.r, c.g), c.b);
+  return mix(min(c, rolled), vec3f(1.0), clamp((lum - 1.2) * 0.25, 0.0, 0.6));  // hot → white
+}`,
       },
       {
         title: 'Perspective grid floor',

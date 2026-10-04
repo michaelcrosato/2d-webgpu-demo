@@ -462,10 +462,10 @@ fn shade(uv: vec2f, px0: vec2f) -> vec4f {
         wobbled by noise; outlines from edges; graphite only sticks to the paper’s peaks; dark areas get a soft smudge.</li>
     </ol>`,
     uses: [
-      { title: 'Painted games', text: 'Okami (sumi-e), Gris and Ori (painted looks), Valiant Hearts, Sable (line art), Return of the Obra Dinn’s cousin Mars After Midnight; “painterly” post filters in Disco Elysium-style menus.' },
-      { title: 'Watercolor worlds', text: 'Child of Light, Gris, Dordogne and Wanderer’s Tale use watercolor washes, edge darkening and paper texture.' },
-      { title: 'Sketch & storyboard', text: 'Hand-drawn intro/flashback scenes, Sketch-mode photo filters, Max Payne-style comic panels, level-editor “blueprint” views.' },
-      { title: 'Tools', text: 'Photo apps (Prisma-style filters), video stylization and non-photorealistic rendering research all build on Kuwahara and structure tensors.' },
+      { title: 'Painted looks', text: 'Disco Elysium and Hades use hand-painted art; Okami renders its world as sumi-e ink painting; real-time painterly filters show up in photo modes and stylized indies.' },
+      { title: 'Watercolor worlds', text: 'Child of Light, Gris and Dordogne are built around watercolor washes, pooled edges and paper texture.' },
+      { title: 'Sketch & storyboard', text: 'Pencil-style flashbacks and intros, “blueprint”/sketch views in editors and builders, and sketch photo filters.' },
+      { title: 'Tools', text: 'Photo apps (Prisma-style filters), video stylization and non-photorealistic rendering research all build on Kuwahara filters and structure tensors.' },
     ],
     try: [
       'On <b>How Kuwahara works</b>, switch between the three variants and hover an edge: the classic box ignores direction, the anisotropic ellipse lines up with it.',
@@ -523,7 +523,6 @@ for (var k = 0; k < 8; k++) {
       },
     ],
     links: [
-      { title: 'Kyprianidis et al. — Anisotropic Kuwahara Filtering (2009)', url: 'https://www.kyprianidis.com/p/pg2009/', note: 'the paper behind the oil look' },
       { title: 'Kuwahara filter (Wikipedia)', url: 'https://en.wikipedia.org/wiki/Kuwahara_filter' },
     ],
   },
