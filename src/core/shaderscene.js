@@ -93,6 +93,11 @@ function normalizePasses(spec) {
   return passes;
 }
 
+/** A pass that never reads its own previous output is a pure filter (blur, bright-pass…): safe to re-run while paused. */
+function readsItself(p) {
+  return new RegExp(`\\b(TEX|TEXR|TEXN|LOAD|LOADW)\\s*\\(\\s*${p.name}\\b`).test(p.code);
+}
+
 function textureNames(spec, passes) {
   const names = passes.map((p) => p.name);
   if (spec.input === 'game') names.push('game');
@@ -122,6 +127,7 @@ function renderScaleOf(spec, params, ctx) {
 async function initGPU(spec, ctx) {
   const gpu = ctx.gpu;
   const passes = normalizePasses(spec);
+  const selfRead = passes.map(readsItself);
   const texNames = textureNames(spec, passes);
   const block = gpu.uniforms(makeUniformBlock(spec));
   block.ctx = ctx;
@@ -223,18 +229,20 @@ async function initGPU(spec, ctx) {
       autoBind(spec, ctx.params, block);
       block.upload();
       if (gameFx) gameFx.draw(enc, gameTarget, resources());
-      if (!ctx.paused || block._frame === 0) {
-        for (let i = 0; i < passes.length; i++) {
-          const p = passes[i];
-          const n = resolveIterations(p, ctx.params);
-          for (let k = 0; k < n; k++) {
-            const pp = targets[p.name];
-            passFx[i].draw(enc, pp.write, resources(), { clear: false });
-            pp.swap();
-          }
+      // While paused, simulations (passes that read themselves) freeze, but pure filter passes still
+      // re-run so slider changes stay visible.
+      const running = !ctx.paused || block._frame === 0;
+      for (let i = 0; i < passes.length; i++) {
+        const p = passes[i];
+        if (!running && selfRead[i]) continue;
+        const n = running ? resolveIterations(p, ctx.params) : 1;
+        for (let k = 0; k < n; k++) {
+          const pp = targets[p.name];
+          passFx[i].draw(enc, pp.write, resources(), { clear: false });
+          pp.swap();
         }
-        block._frame++;
       }
+      if (running) block._frame++;
       const rs = renderScaleOf(spec, ctx.params, ctx);
       if (rs < 0.999) {
         const w = Math.max(1, Math.round(ctx.width * rs));
@@ -258,6 +266,7 @@ async function initGPU(spec, ctx) {
 async function initGL(spec, ctx) {
   const kit = ctx.glkit;
   const passes = normalizePasses(spec);
+  const selfRead = passes.map(readsItself);
   const texNames = textureNames(spec, passes);
   const block = kit.uniforms(makeUniformBlock(spec));
   block.ctx = ctx;
@@ -350,18 +359,18 @@ async function initGL(spec, ctx) {
       writeBuiltins(block, ctx);
       autoBind(spec, ctx.params, block);
       if (gameFx) gameFx.draw(gameTarget, resources());
-      if (!ctx.paused || block._frame === 0) {
-        for (let i = 0; i < passes.length; i++) {
-          const p = passes[i];
-          const n = resolveIterations(p, ctx.params);
-          for (let k = 0; k < n; k++) {
-            const pp = targets[p.name];
-            passFx[i].draw(pp.write, resources(), { clear: false });
-            pp.swap();
-          }
+      const running = !ctx.paused || block._frame === 0;
+      for (let i = 0; i < passes.length; i++) {
+        const p = passes[i];
+        if (!running && selfRead[i]) continue;
+        const n = running ? resolveIterations(p, ctx.params) : 1;
+        for (let k = 0; k < n; k++) {
+          const pp = targets[p.name];
+          passFx[i].draw(pp.write, resources(), { clear: false });
+          pp.swap();
         }
-        block._frame++;
       }
+      if (running) block._frame++;
       const rs = renderScaleOf(spec, ctx.params, ctx);
       if (rs < 0.999) {
         const w = Math.max(1, Math.round(ctx.width * rs));

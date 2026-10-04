@@ -217,7 +217,7 @@ fn exCaves(px: vec2f) -> vec3f {
     var bgm = 4.0;
     if (depth < 0.13) { bgm = 3.0; }
     if (depth > 0.95) { bgm = 5.0; }
-    col = matColor(bgm, hsh, sub) * 0.32;
+    col = matColor(bgm, hsh, sub) * 0.42;
     if (m > 9.5) {
       let flow = 0.5 + 0.5 * sin(w.x * 60.0 + u.time * 2.0 + sub * 3.0);
       col = mix(vec3f(0.95, 0.3, 0.05), vec3f(1.0, 0.75, 0.2), flow * sub);
@@ -240,7 +240,7 @@ fn exCaves(px: vec2f) -> vec3f {
   }
   // lighting: daylight fades with depth; the mouse is your torch; lava glows
   if (m > 0.5) {
-    let day = mix(1.0, 0.3, smoothstep(0.03, 0.45, depth));
+    let day = mix(1.0, 0.38, smoothstep(0.03, 0.45, depth));
     let dm = length(w - mw) / (0.16 / sqrt(u.view.w));
     let torch = 1.4 / (1.0 + dm * dm * 3.0) * u.mouse.w;
     let deepGlow = vec3f(1.0, 0.4, 0.1) * smoothstep(1.2, 1.6, depth) * 0.25;

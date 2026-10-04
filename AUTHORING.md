@@ -139,7 +139,8 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
   - `format`: `'rgba16float'` (default, filterable), `'rgba8unorm'`, or `'rgba32float'` (**LOAD only**, no TEX).
   - `iterations`: number, param key, or `(params) => n` — run the pass several times per frame (sim speed).
   - Initialise state when `u.frame < 0.5` (first frame after start/reset/resize). The ↻ button and `reset` buttons clear buffers.
-  - Passes do not run while paused (the final image still does).
+  - While paused, passes that read their **own** previous output (simulations/feedback) freeze; pure filter passes
+    (that only read other passes) keep re-running so slider changes stay visible. The final image always runs.
 - With `renderScale < 1`, the final `shade()` runs on the smaller target: `px` is in **low-res** pixels while
   `u.resolution` stays the canvas size. Use `uv` (or `uv * u.resolution`) for layout math; use `px` when you want
   per-low-res-pixel effects (e.g. ordered dithering on the big pixels).

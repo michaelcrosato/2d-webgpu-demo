@@ -250,19 +250,21 @@ fn wood(lp: vec2f, sc: f32, off: vec2f, oct: i32) -> vec3f {
 }
 
 fn marble(lp: vec2f, sc: f32, off: vec2f, oct: i32) -> vec3f {
-  let p = lp * sc * 0.8 + off;
-  let tb = turb(p, oct);
-  // soft grey bands that follow the same turbulent flow as the veins
-  let phase = (p.x * 0.9 + p.y * 0.5) * 3.0 + tb * u.warp * 5.0;
+  let p = lp * sc * 0.6 + off;
+  // big smooth swirls (fBm) + small crinkles (turbulence) bend a simple sine wave
+  let w1 = fbm(p * 0.6, 3);
+  let tb = turb(p * 1.3, min(oct, 4));
+  let phase = (p.x * 0.8 + p.y * 0.45) * 2.6 + u.warp * (2.4 * w1 + 1.0 * tb);
   let band = 0.5 + 0.5 * sin(phase);
   let cloud = fbm(p * 1.3 + 3.0, oct) * 0.5 + 0.5;
-  var c = mix(vec3f(0.95, 0.94, 0.92), vec3f(0.8, 0.81, 0.84), smoothstep(0.35, 1.0, band) * 0.8 + cloud * 0.25);
-  // main dark veins with a soft halo, plus thin golden secondary veins
+  var c = mix(vec3f(0.95, 0.94, 0.92), vec3f(0.8, 0.81, 0.84), smoothstep(0.4, 1.0, band) * 0.7 + cloud * 0.25);
+  // main veins: dark core with a soft grey halo
   let v = abs(sin(phase * 0.5 + 0.4));
-  c = mix(c, vec3f(0.62, 0.63, 0.68), (1.0 - smoothstep(0.0, 0.22, v)) * 0.45);
-  c = mix(c, vec3f(0.3, 0.31, 0.37), 1.0 - smoothstep(0.0, 0.045, v));
-  let v2 = abs(sin((p.y * 1.7 - p.x * 0.6) * 1.3 + turb(p * 0.8 + 9.0, oct) * u.warp * 3.0));
-  c = mix(c, vec3f(0.66, 0.58, 0.42), (1.0 - smoothstep(0.0, 0.035, v2)) * 0.5);
+  c = mix(c, vec3f(0.58, 0.59, 0.65), (1.0 - smoothstep(0.0, 0.3, v)) * 0.5);
+  c = mix(c, vec3f(0.27, 0.28, 0.34), 1.0 - smoothstep(0.015, 0.06, v));
+  // a few thin golden secondary veins
+  let v2 = abs(sin((p.y * 1.7 - p.x * 0.6) * 1.1 + u.warp * 2.0 * fbm(p * 0.9 + 9.0, 3)));
+  c = mix(c, vec3f(0.7, 0.6, 0.42), (1.0 - smoothstep(0.0, 0.025, v2)) * 0.45);
   // polished highlight
   c += vec3f(0.06) * smoothstep(0.35, 0.0, abs(lp.x - lp.y * 0.6 - 0.35));
   return c;
