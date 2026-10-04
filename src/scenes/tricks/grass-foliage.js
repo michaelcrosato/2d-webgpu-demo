@@ -387,7 +387,7 @@ const LOOKS = {
 };
 
 export default {
-  interaction: 'Move the mouse through the grass. Meadow: ←/→ (A/D) walk.',
+  interaction: 'Sweep the mouse through the grass',
   keys: true,
   examples: [
     {
@@ -403,6 +403,7 @@ export default {
       kind: 'In a game',
       note: 'A hero walking through a flowery meadow: blades near the player (and the mouse) are pushed away and spring back with a wobble, because every blade has its own little physics state updated by a compute shader each frame.',
       params: { count: 60000, strength: 0.6, gustFreq: 1.0, gustSpeed: 0.8, flowerRate: 0.018, showWind: false },
+      hint: '←/→ (A/D) walk · sweep the mouse through the grass',
     },
     {
       id: 'forest',
@@ -678,7 +679,7 @@ p.x += windAt(q.a.x, u.time) * flex * hf * hf * height * 0.08;`,
           pass.draw(6, ctx.testMode ? 60 : LEAVES);
         }
         pass.end();
-        hud.textContent = `${count.toLocaleString()} blades · 1 compute dispatch (${Math.ceil(count / 256)} workgroups) · ${items.length} swaying sprites`;
+        hud.textContent = `${count.toLocaleString()} blades · 1 compute dispatch · ${items.length} swaying sprites`;
       },
     };
   },

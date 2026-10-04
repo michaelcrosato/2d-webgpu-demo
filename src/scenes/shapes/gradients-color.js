@@ -136,7 +136,7 @@ export default shaderScene({
       labels(ctx, 'types', TYPE_NAMES.map((n, i) => ({ text: n, x: ((i % 3) + 0.5) / 3, y: (Math.floor(i / 3) + 0.9) / 2, valign: 'middle', style: LBL })));
     } else if (ex === 'spaces') {
       labels(ctx, 'spaces', SPACE_NAMES.map((n, i) => ({ text: n, x: 0.035, y: 0.13 + i * 0.215, align: 'left', valign: 'middle', style: LBL }))
-        .concat([{ text: 'mix at t = 0.5', x: 0.9, y: 0.83, valign: 'top', style: LBL }]));
+        .concat([{ text: 'mix at t = 0.5', x: 0.9, y: 0.875, valign: 'top', style: LBL }]));
     } else if (ex === 'banding') {
       labels(ctx, 'banding', [
         { text: 'plain rounding', x: 0.25, y: 0.04, style: LBL },

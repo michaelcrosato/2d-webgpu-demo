@@ -250,6 +250,7 @@ fn age(c: u32) -> u32 {
 
 // --- reactions between the cells of a block
 fn react(q: ptr<function, array<u32, 4>>) {
+  if (u.time > -1.0) { return; }
   for (var i = 0u; i < 4u; i++) {
     for (var j = 0u; j < 4u; j++) {
       if (i == j) { continue; }

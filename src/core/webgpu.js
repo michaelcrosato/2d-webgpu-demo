@@ -99,6 +99,11 @@ export const BLEND = {
     color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'reverse-subtract' },
     alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
   },
+  // erase: destination *= (1 - source alpha) — punch holes into masks/render targets
+  erase: {
+    color: { srcFactor: 'zero', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+    alpha: { srcFactor: 'zero', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+  },
   max: {
     color: { srcFactor: 'one', dstFactor: 'one', operation: 'max' },
     alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'max' },

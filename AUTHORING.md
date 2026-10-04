@@ -221,7 +221,7 @@ Helpers:
 Drawing to the canvas: the canvas view is `ctx.target`; its format is `gpu.format` (usually `bgra8unorm`), so pass
 `{ view: ctx.target, format: gpu.format }` to helpers that need to know the format.
 
-Blend presets (`blend:` option): `'alpha' 'premultiplied' 'additive' (src-alpha, one) 'add' (one, one) 'multiply' 'screen' 'subtract' 'max' 'min'`.
+Blend presets (`blend:` option): `'alpha' 'premultiplied' 'additive' (src-alpha, one) 'add' (one, one) 'multiply' 'screen' 'subtract' 'erase' (dst × (1 − src alpha)) 'max' 'min'`.
 
 ### WebGPU gotchas (read these!)
 

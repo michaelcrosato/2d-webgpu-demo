@@ -109,11 +109,11 @@ async function loadExtraTextures(spec) {
   return out;
 }
 
-function renderScaleOf(spec, params) {
+function renderScaleOf(spec, params, ctx) {
   const r = spec.renderScale;
   if (r === undefined) return 1;
   if (typeof r === 'number') return r;
-  if (typeof r === 'function') return r(params);
+  if (typeof r === 'function') return r(params, ctx);
   return params[r] ?? 1;
 }
 
@@ -235,7 +235,7 @@ async function initGPU(spec, ctx) {
         }
         block._frame++;
       }
-      const rs = renderScaleOf(spec, ctx.params);
+      const rs = renderScaleOf(spec, ctx.params, ctx);
       if (rs < 0.999) {
         const w = Math.max(1, Math.round(ctx.width * rs));
         const h = Math.max(1, Math.round(ctx.height * rs));
@@ -362,7 +362,7 @@ async function initGL(spec, ctx) {
         }
         block._frame++;
       }
-      const rs = renderScaleOf(spec, ctx.params);
+      const rs = renderScaleOf(spec, ctx.params, ctx);
       if (rs < 0.999) {
         const w = Math.max(1, Math.round(ctx.width * rs));
         const h = Math.max(1, Math.round(ctx.height * rs));
