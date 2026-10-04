@@ -38,7 +38,7 @@ const ANIMALS = {
 // band where patterns exist (the plain rectangle wastes most of the screen on dead/flooded areas)
 const MAP = { k0: 0.047, k1: 0.068 };
 const fLo = (k) => Math.max(0.004, (k - 0.041) * 1.1);
-const fHi = (k) => 0.022 + (k - 0.044) * 3.5;
+const fHi = (k) => 0.016 + (k - 0.047) * 4.4;
 
 const CONTROLS = [
   { type: 'heading', label: 'Chemistry' },
@@ -94,12 +94,12 @@ const COMMON = /* wgsl */ `
 fn mapFK(uv: vec2f) -> vec2f {
   let k = mix(${MAP.k0}, ${MAP.k1}, uv.x);
   let lo = max(0.004, (k - 0.041) * 1.1);
-  let hi = 0.022 + (k - 0.044) * 3.5;
+  let hi = 0.016 + (k - 0.047) * 4.4;
   return vec2f(mix(hi, lo, uv.y), k);
 }
 fn mapUV(f: f32, k: f32) -> vec2f {
   let lo = max(0.004, (k - 0.041) * 1.1);
-  let hi = 0.022 + (k - 0.044) * 3.5;
+  let hi = 0.016 + (k - 0.047) * 4.4;
   return vec2f((k - ${MAP.k0}) / (${MAP.k1} - ${MAP.k0}), 1.0 - (f - lo) / (hi - lo));
 }
 // level layout for the "creep" example: rooms + corridors as box SDFs (negative = floor)

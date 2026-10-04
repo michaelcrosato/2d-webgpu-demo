@@ -321,8 +321,6 @@ sprites.draw(x, groundY, 16 * s * sx, 16 * s * sy, { anchor: [0.5, 1] });`,
       const ay = (H - AH) / 2 + H * 0.03;
 
       cam.setViewport(W, H).reset();
-      shapes.begin();
-      sprites.begin();
       // backgrounds
       shapes.rect(0, 0, W, H, '#151a26');
       shapes.rect(W * 0.02, H * 0.1, leftW - W * 0.01, H * 0.74, '#1c2233', { radius: 10 * ctx.dpr });
@@ -356,7 +354,6 @@ sprites.draw(x, groundY, 16 * s * sx, 16 * s * sy, { anchor: [0.5, 1] });`,
       sprites.flush(enc, canvasOf(), cam, { extra: [1, 1, 1, 0], filter: as < 1 ? 'linear' : 'nearest' });
 
       // overlays: frame rectangles, highlights, filmstrip boxes
-      shapes.begin();
       const lw = Math.max(1, ctx.dpr);
       const fr = (name) => {
         const f = atlas.frames[name];
@@ -472,8 +469,6 @@ sprites.draw(x, groundY, 16 * s * sx, 16 * s * sy, { anchor: [0.5, 1] });`,
       const t = (ctx.time - sq.t0) % cycle;
       const pos = [W * 0.27, W * 0.68];
       cam.setViewport(W, H).reset();
-      shapes.begin();
-      sprites.begin();
       // backdrop: the same parallax sky as the playable level, slowly drifting
       SU.set('res', [W, H]).set('camX', ctx.time * 12).set('scale', s);
       sky.draw(enc, canvasOf());
@@ -484,7 +479,6 @@ sprites.draw(x, groundY, 16 * s * sx, 16 * s * sy, { anchor: [0.5, 1] });`,
       }
       sprites.flush(enc, canvasOf(), cam, { extra: [1, 1, 1, 0] });
 
-      shapes.begin();
       const states = [];
       for (let side = 0; side < 2; side++) {
         const juicy = side === 1;
@@ -511,7 +505,6 @@ sprites.draw(x, groundY, 16 * s * sx, 16 * s * sy, { anchor: [0.5, 1] });`,
       const st = states[1];
       if (p.useDust && st.phase === 'land') {
         const u = t - st.A - st.D;
-        shapes.begin();
         for (let i = 0; i < 6; i++) {
           const dir = i < 3 ? -1 : 1;
           const k = (i % 3) / 3;
@@ -524,7 +517,6 @@ sprites.draw(x, groundY, 16 * s * sx, 16 * s * sy, { anchor: [0.5, 1] });`,
       }
 
       // graph of height and scale over one cycle
-      shapes.begin();
       const gx = W * 0.06;
       const gw = W * 0.88;
       const gy = H * 0.77;
@@ -577,11 +569,9 @@ sprites.draw(x, groundY, 16 * s * sx, 16 * s * sy, { anchor: [0.5, 1] });`,
       const baseY = H * 0.8;
       const frames = atlas.anim('hero_run');
       cam.setViewport(W, H).reset();
-      shapes.begin();
       shapes.rect(0, 0, W, H, '#161b29');
       shapes.rect(0, baseY, W, H - baseY, '#202638');
       shapes.flush(enc, canvasOf(), cam, { clear: [0.08, 0.1, 0.15, 1] });
-      sprites.begin();
       const ts = 16 * Math.max(1, Math.round(s / 2));
       for (let x = 0; x < W + ts; x += ts) sprites.draw(x, baseY, ts, ts, { uv: atlas.uv('tile_stone'), anchor: [0, 0] });
       const custom = (() => {
@@ -605,7 +595,6 @@ sprites.draw(x, groundY, 16 * s * sx, 16 * s * sy, { anchor: [0.5, 1] });`,
       sprites.flush(enc, canvasOf(), cam, { extra: [...custom, p.method === 'multiply' ? 1 : 0] });
 
       // swatches: key colors (top row) -> team colors (bottom row)
-      shapes.begin();
       const fsz = Math.max(1, Math.round(H / 220));
       const sw = Math.max(5, Math.min(Math.floor((gap * 0.78) / 5.6), Math.round(H * 0.045)));
       const sg = Math.max(2, Math.round(sw * 0.15));
@@ -791,7 +780,6 @@ sprites.draw(x, groundY, 16 * s * sx, 16 * s * sy, { anchor: [0.5, 1] });`,
       SU.set('res', [W, H]).set('camX', cam.x).set('scale', k);
       sky.draw(enc, canvasOf());
       // level tiles (only the visible ones)
-      sprites.begin();
       const x0 = Math.max(0, Math.floor((cam.x - halfW) / TILE));
       const x1 = Math.min(LW - 1, Math.ceil((cam.x + halfW) / TILE));
       const wf = Math.floor(animClock * 5) % 4;
@@ -836,14 +824,12 @@ sprites.draw(x, groundY, 16 * s * sx, 16 * s * sy, { anchor: [0.5, 1] });`,
       sprites.draw(hero.x, hero.y, 16 / sy, 16 * sy, { uv: atlas.uv(frame), anchor: [0.5, 1], flipX: hero.face < 0 });
       sprites.flush(enc, canvasOf(), cam, { extra: [1, 1, 1, 0] });
       // dust & sparkles
-      shapes.begin();
       for (const d of dust) {
         const a = 1 - d.t / d.life;
         shapes.circle(d.x, d.y, 1 + 2.5 * (1 - a * 0.5), [...d.c, a * 0.85]);
       }
       shapes.flush(enc, canvasOf(), cam);
       // HUD in screen space
-      shapes.begin();
       const hud = new Camera2D().setViewport(W, H);
       const fs = Math.max(2, k);
       pixelText(shapes, `COINS ${score}`, W / 2, 12 * ctx.dpr, fs, '#fcd34d', { align: 'center' });
@@ -867,6 +853,8 @@ sprites.draw(x, groundY, 16 * s * sx, 16 * s * sy, { anchor: [0.5, 1] });`,
         if (key === 'anim') clickedAnim = null;
       },
       frame(ctx) {
+        shapes.begin(); // once per frame: every flush draws only what was added since the previous flush
+        sprites.begin();
         stateTag.style.display = ctx.example === 'play' ? '' : 'none';
         if (ctx.example !== 'flipbook') hover.style.display = 'none';
         if (ctx.example === 'flipbook') flipbook(ctx);

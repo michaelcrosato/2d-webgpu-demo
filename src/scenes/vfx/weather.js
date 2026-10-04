@@ -117,8 +117,8 @@ fn update(@builtin(global_invocation_id) gid: vec3u) {
   } else if (d.kind == K_FLAKE) {
     // flutter: each flake sways on its own sine, wind pushes harder on near flakes
     let ph = u.time * (1.2 + d.seed * 1.6) + d.seed * 40.0;
-    let target = vec2f(w * mix(80.0, 220.0, d.z) + sin(ph) * 45.0 * (0.4 + d.z), mix(45.0, 150.0, d.z) * u.speedMul + cos(ph * 1.3) * 12.0);
-    d.vel = mix(d.vel, target, 1.0 - exp(-dt * 2.5));
+    let tgtV = vec2f(w * mix(80.0, 220.0, d.z) + sin(ph) * 45.0 * (0.4 + d.z), mix(45.0, 150.0, d.z) * u.speedMul + cos(ph * 1.3) * 12.0);
+    d.vel = mix(d.vel, tgtV, 1.0 - exp(-dt * 2.5));
     d.pos += d.vel * dt;
     d.rot += d.spin * dt * 0.3;
     if (d.z > 0.72 && u.accumulate != 0u) {
@@ -300,9 +300,9 @@ fn boltDist(p: vec2f) -> f32 {
 // ---------------------------------------------------------------- rainy city
 fn cityAt(w: vec2f, reflectFlash: f32) -> vec3f {
   // sky with storm clouds lit by the flash
-  let cl = fbm(vec2f(w.x * 0.0016 - u.time * 0.02 * (1.0 + u.wind), w.y * 0.004), 4) * 0.5 + 0.5;
+  let cl = fbm(vec2f(w.x * 0.0016 - u.time * 0.02 * (1.0 + u.wind), w.y * 0.004), 4 - i32(u.lod) * 2) * 0.5 + 0.5;
   var c = mix(vec3f(0.012, 0.014, 0.022), vec3f(0.03, 0.033, 0.045), smoothstep(0.35, 0.8, cl)) * (1.0 + 0.4 * (1.0 - w.y / 760.0));
-  c += vec3f(0.55, 0.6, 0.8) * u.flash * (0.25 + 0.75 * smoothstep(0.3, 0.75, cl)) * 1.6 * reflectFlash;
+  c += vec3f(0.55, 0.6, 0.8) * u.flash * (0.2 + 0.8 * smoothstep(0.3, 0.75, cl)) * 1.0 * reflectFlash;
   // far skyline: hazy; revealed against the sky when lightning flashes
   let far = skyline(w.x, 11.0, 70.0, 120.0, 330.0);
   if (w.y > u.groundTop - far.x) {
@@ -370,7 +370,7 @@ fn pine(p: vec2f, base: vec2f, h: f32, sway: f32) -> f32 {
 fn blizzard(w: vec2f) -> vec3f {
   var c = mix(vec3f(0.07, 0.08, 0.11), vec3f(0.16, 0.17, 0.2), smoothstep(0.0, 700.0, w.y));
   // mountains
-  let mh = 430.0 + 120.0 * (ridged(vec2f(w.x * 0.0015, 2.0), 4) - 0.5) * -1.0;
+  let mh = 430.0 + 120.0 * (ridged(vec2f(w.x * 0.0015, 2.0), 4 - i32(u.lod) * 2) - 0.5) * -1.0;
   if (w.y > mh) { c = mix(c, vec3f(0.2, 0.22, 0.27), 0.6 * aa(mh - w.y + 0.5)); }
   // far forest band
   let sway = u.wind + u.gust;
@@ -411,7 +411,7 @@ fn blizzard(w: vec2f) -> vec3f {
     c = mix(c, sc * (0.9 + 0.1 * valueNoise(w * 0.3)), aa(surf - w.y));
   }
   // drifting fog banks
-  let fg = fbm(vec2f(w.x * 0.002 - u.time * (0.05 + 0.1 * abs(sway)) * sign(sway + 0.001), w.y * 0.006), 4) * 0.5 + 0.5;
+  let fg = fbm(vec2f(w.x * 0.002 - u.time * (0.05 + 0.1 * abs(sway)) * sign(sway + 0.001), w.y * 0.006), 4 - i32(u.lod) * 2) * 0.5 + 0.5;
   c = mix(c, vec3f(0.3, 0.32, 0.37), smoothstep(0.35, 0.85, fg) * u.fog * 0.6 * smoothstep(300.0, 700.0, w.y));
   return c;
 }
@@ -449,12 +449,14 @@ fn autumn(w: vec2f) -> vec3f {
   td = min(td, sdSegment(w, tb + vec2f(sw * 30.0, -280.0), tb + vec2f(150.0 + sw * 80.0, -430.0)) - 7.0);
   c = mix(c, vec3f(0.05, 0.03, 0.025), aa(td));
   let cp = w - (tb + vec2f(sw * 90.0, -470.0));
-  let cn = fbm(cp * 0.012 + vec2f(sw * 0.4, 0.0), 4);
+  if (length(cp) < 420.0) {
+  let cn = fbm(cp * 0.012 + vec2f(sw * 0.4, 0.0), 4 - i32(u.lod) * 2);
   let canopy = length(cp * vec2f(0.75, 1.1)) - 190.0 - cn * 90.0;
-  let cc = mix(vec3f(0.55, 0.16, 0.04), vec3f(0.95, 0.45, 0.08), smoothstep(-0.4, 0.5, fbm(cp * 0.03, 3)));
+  let cc = mix(vec3f(0.55, 0.16, 0.04), vec3f(0.95, 0.45, 0.08), smoothstep(-0.4, 0.5, fbm(cp * 0.03, 3 - i32(u.lod))));
   c = mix(c, cc * mix(0.45, 1.0, smoothstep(150.0, -150.0, cp.x + cp.y * 0.5)), aa(canopy));
+  }
   // warm haze
-  let fg = fbm(vec2f(w.x * 0.0025 - u.time * 0.06 * sign(sway + 0.001), w.y * 0.008), 3) * 0.5 + 0.5;
+  let fg = fbm(vec2f(w.x * 0.0025 - u.time * 0.06 * sign(sway + 0.001), w.y * 0.008), 3 - i32(u.lod)) * 0.5 + 0.5;
   c = mix(c, vec3f(0.9, 0.5, 0.3), smoothstep(0.4, 0.9, fg) * u.fog * 0.35 * smoothstep(350.0, 750.0, w.y));
   return c;
 }
@@ -495,12 +497,13 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
   var c = TEX(hdr, uv).rgb + TEX(bloomTex, uv).rgb * u.bloomAmt;
   // near fog layer drifting over everything (in front of the particles)
   let w = uv * u.world;
-  let f = fbm(vec2f(w.x * 0.0018 - u.time * 0.08 * (u.wind + u.gust), w.y * 0.004 + u.time * 0.02), 4) * 0.5 + 0.5;
+  var f = 0.0;
+  if (u.fog > 0.0) { f = fbm(vec2f(w.x * 0.0018 - u.time * 0.08 * (u.wind + u.gust), w.y * 0.004 + u.time * 0.02), 4 - i32(u.lod) * 2) * 0.5 + 0.5; }
   let fogCol = select(u.fogColor.rgb, u.fogColor.rgb + vec3f(0.3, 0.32, 0.4) * u.flash, u.mode == 0u);
   c = mix(c, fogCol, smoothstep(0.45, 0.95, f) * u.fog * 0.35 * smoothstep(0.25, 0.85, uv.y));
   let v = uv - 0.5;
   c *= 1.0 - dot(v, v) * 0.8;
-  return vec4f(vfxTonemap(c * u.exposure * (1.0 + u.flash * 0.6), px), 1.0);
+  return vec4f(vfxTonemap(c * u.exposure * (1.0 + u.flash * 0.35), px), 1.0);
 }
 `;
 
@@ -665,6 +668,7 @@ a = exp(-q.y * q.y * 3.0) * (1.0 - q.x * q.x) * smoothstep(-1.0, -0.2, q.x);`,
         exposure: 'f32',
         bloomAmt: 'f32',
         pxw: 'f32',
+        lod: 'f32',
         ambient: 'vec3f',
         fogColor: 'vec4f',
         lamps: 'array<vec4f, 3>',
@@ -714,6 +718,8 @@ a = exp(-q.y * q.y * 3.0) * (1.0 - q.x * q.x) * smoothstep(-1.0, -0.2, q.x);`,
     let hdr = gpu.target(ctx.width, ctx.height, { format: 'rgba16float', label: 'weather-hdr' });
 
     const readout = tag(ctx);
+    const BGS = ctx.testMode ? 0.5 : 1;
+    let bgLow = null;
     let seed = 1;
     let emitAcc = 0;
     let needReset = true;
@@ -805,6 +811,7 @@ a = exp(-q.y * q.y * 3.0) * (1.0 - q.x * q.x) * smoothstep(-1.0, -0.2, q.x);`,
         .set('exposure', p.exposure)
         .set('bloomAmt', 0.35)
         .set('pxw', 1000 / ctx.height)
+        .set('lod', ctx.testMode ? 1 : 0)
         .set('ambient', sc.ambient)
         .set('fogColor', sc.fog)
         .set('lamps', lamps)
@@ -878,7 +885,17 @@ a = exp(-q.y * q.y * 3.0) * (1.0 - q.x * q.x) * smoothstep(-1.0, -0.2, q.x);`,
           U.upload();
         }
         sim.dispatch(enc, 'args', 1, { u: U, ps: drops, ctr: counters, drawArgs, snowCols });
-        bg.draw(enc, hdr, { snowCols }, { clear: [0, 0, 0, 1] });
+        if (BGS < 1) {
+          // the headless test GPU renders the backdrop at half resolution
+          const bw = Math.max(16, Math.round(ctx.width * BGS));
+          const bh = Math.max(16, Math.round(ctx.height * BGS));
+          if (!bgLow || bgLow.width !== bw || bgLow.height !== bh) {
+            bgLow?.destroy();
+            bgLow = gpu.target(bw, bh, { format: 'rgba16float', label: 'weather-bg-low' });
+          }
+          bg.draw(enc, bgLow, { snowCols }, { clear: [0, 0, 0, 1] });
+          gpu.blit(enc, bgLow, hdr);
+        } else bg.draw(enc, hdr, { snowCols }, { clear: [0, 0, 0, 1] });
         const pass = enc.beginRenderPass({ colorAttachments: [{ view: hdr.view, loadOp: 'load', storeOp: 'store' }] });
         pass.setPipeline(drawPipe);
         pass.setBindGroup(0, draw.bind({ u: U, ps: drops, strip, stripSamp: gpu.sampler('linear-mip') }));

@@ -22,6 +22,7 @@ const sim = {
   fireT: 0,
   lastKill: 0,
   seed: 1,
+  testMode: false,
 };
 const rand = () => {
   sim.seed = (sim.seed * 16807) % 2147483647;
@@ -150,9 +151,38 @@ function stepArena(ctx) {
   return { ship: [s.x, s.y, s.a, 1], en, enRot: rot, bl, ev };
 }
 
+// ------------------------------------------------------------------------------ neon flicker
+// Each tube drops out at random moments; tube 2 (the "E") is dying and buzzes far more often.
+const hashf = (n) => {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
+function tubeStates(t, strength) {
+  const on = [];
+  for (let id = 0; id < 6; id++) {
+    const dying = id === 2;
+    const rate = dying ? 17 : 7;
+    const chance = (dying ? 0.35 : 0.04) * strength;
+    const off = hashf(Math.floor(t * rate) + id * 13.1) > 1 - chance ? 1 : 0;
+    const hum = 1 - strength * 0.06 * (0.5 + 0.5 * Math.sin(t * 120 + id));
+    on.push((1 - off) * hum);
+  }
+  return { onA: on.slice(0, 4), onB: [on[4], on[5], 0, 0] };
+}
+
 // ----------------------------------------------------------------------------------- shaders
 const CODE = /* wgsl */ `
 fn pxSize() -> f32 { return 1.0 / u.resolution.y; }
+// Linear up to a knee, then a soft shoulder towards 1: overlapping neon cores turn white
+// instead of clipping to flat color, while normal colors stay untouched.
+fn softClip(c: vec3f) -> vec3f {
+  let k = 0.75;
+  let over = max(c - vec3f(k), vec3f(0.0));
+  let rolled = vec3f(k) + (1.0 - k) * (vec3f(1.0) - exp(-over / (1.0 - k)));
+  let lum = max(max(c.r, c.g), c.b);
+  // very hot pixels also desaturate towards white, like an over-exposed tube
+  return mix(min(c, rolled), vec3f(1.0), clamp((lum - 1.2) * 0.25, 0.0, 0.6));
+}
 
 // A glowing tube/line: white-hot core + colored halo. d = distance to the centre line.
 fn neonLine(d: f32, col: vec3f, width: f32) -> vec3f {
@@ -187,14 +217,14 @@ fn sunsetView(px: vec2f) -> vec3f {
     let h = hash22(cell);
     let sd = length(fract(sp) - h);
     let tw = 0.6 + 0.4 * sin(t * 3.0 + h.x * 40.0);
-    col += u.colB * step(0.93, hash21(cell + 7.0)) * exp(-sd * 18.0) * tw * smoothstep(0.25, 0.7, k) * 1.4;
+    col += mix(u.colB, vec3f(1.0), 0.5) * step(0.93, hash21(cell + 7.0)) * exp(-pow(sd * res.y / 90.0, 2.0) * 0.6) * tw * smoothstep(0.25, 0.7, k) * 1.4;
     // sun with scrolling stripe gaps
     let sc = vec2f(0.0, hz - 0.17);
     let sr = 0.23;
     let sdist = length(p - sc) - sr;
     let sy = (p.y - sc.y) / sr;
     let sunCol = mix(vec3f(1.0, 0.93, 0.35), mix(vec3f(1.0, 0.45, 0.3), u.colA, 0.6), smoothstep(-0.9, 0.7, sy));
-    let gap = step(-0.15, sy) * step(fract(sy * 4.5 - t * 0.25), (sy + 0.15) * 0.42);
+    let gap = step(-0.2, sy) * step(fract(sy * 3.6 - t * 0.22), (sy + 0.2) * 0.62);
     let sunMask = (1.0 - smoothstep(-pxSize(), pxSize(), sdist)) * (1.0 - gap);
     col += u.colA * exp(-max(sdist, 0.0) * 7.0) * 0.55 * u.glow;
     col = mix(col, sunCol, sunMask);
@@ -225,10 +255,10 @@ fn sunsetView(px: vec2f) -> vec3f {
     // perspective floor: depth from the screen y, world x scaled by depth
     let dy = max(p.y - hz, 0.0001);
     let z = 0.22 / dy;
-    let wp = vec2f((p.x + u.look * 0.4) * z, z + t * 1.2) * (u.grid * 0.12);
+    let wp = vec2f((p.x + u.look * 0.4) * z, z + t * 1.2) * (u.grid * 0.32);
     let fw = max(fwidth(wp), vec2f(0.0001));
     let dl = abs(fract(wp + 0.5) - 0.5);
-    let lw = 0.035;
+    let lw = 0.03;
     let cov = clamp((vec2f(lw) - dl) / fw + 0.5, vec2f(0.0), vec2f(1.0));
     let farFade = clamp(1.4 - max(fw.x, fw.y) * 3.0, 0.0, 1.0);
     let lines = max(cov.x, cov.y);
@@ -340,12 +370,16 @@ fn arenaView(px: vec2f) -> vec3f {
       let fade = exp(-age * 2.5);
       let ringR = age * (0.55 + 0.4 * big);
       col += neonLine(abs(r - ringR), ec, 0.001) * fade * 0.7;
-      if (r < 0.32) {
+      let maxDist = 0.9 * (1.0 - exp(-age * 3.5)) / 3.5 * 2.2 + 0.02;
+      if (r < maxDist) {
+        // only test the sparks whose direction is close to this pixel's angle (5 of 24)
         var ds = 1.0;
-        for (var k = 0; k < 20; k++) {
-          let fk = f32(k);
-          let ang = fk / 20.0 * TAU + hash11(fk + e.x * 31.0) * 0.6;
-          let spd = 0.35 + 0.55 * hash11(fk * 1.7 + e.y * 17.0);
+        let ak = atan2(v.y, v.x) / TAU * 24.0;
+        for (var j = -2; j <= 2; j++) {
+          let fk = fmod(floor(ak) + f32(j) + 24.0, 24.0);
+          let rnd = fract(sin(vec2f(fk * 12.9898 + e.x * 78.233, fk * 4.1414 + e.y * 37.719)) * 43758.5453);
+          let ang = (fk + 0.5) / 24.0 * TAU + (rnd.x - 0.5) * 0.2;
+          let spd = 0.35 + 0.55 * rnd.y;
           let dist = spd * (1.0 - exp(-age * 3.5)) / 3.5 * 2.2;
           let len = 0.006 + 0.05 * spd * exp(-age * 3.5);
           let dir = vec2f(cos(ang), sin(ang));
@@ -385,14 +419,14 @@ fn letterSd(q: vec2f, which: i32) -> f32 {
   d = min(d, sdSegment(q, vec2f(-0.27, -0.5), vec2f(0.27, 0.5)));
   return min(d, sdSegment(q, vec2f(0.27, 0.5), vec2f(0.27, -0.5)));
 }
+// tube on/off state: computed once per frame in JS (it is the same for every pixel)
 fn flickerOn(id: f32, strength: f32) -> f32 {
-  let t = u.time * u.speed;
-  // random short drop-outs; the "E" (id 2) is a dying tube that buzzes much more
-  let rate = select(7.0, 17.0, id > 1.5 && id < 2.5);
-  let chance = select(0.04, 0.35, id > 1.5 && id < 2.5) * strength;
-  let off = step(1.0 - chance, hash11(floor(t * rate) + id * 13.1));
-  let hum = 1.0 - strength * 0.06 * (0.5 + 0.5 * sin(t * 120.0 + id));
-  return (1.0 - off) * hum;
+  if (id < 0.5) { return u.onA.x; }
+  if (id < 1.5) { return u.onA.y; }
+  if (id < 2.5) { return u.onA.z; }
+  if (id < 3.5) { return u.onA.w; }
+  if (id < 4.5) { return u.onB.x; }
+  return u.onB.y;
 }
 fn tube(d: f32, col: vec3f, on: f32) -> vec4f {
   // returns rgb = light emitted by the tube (core + glow), a = tube body coverage
@@ -451,7 +485,7 @@ fn signView(px: vec2f) -> vec3f {
   light += u.colB * exp(-glassD / 0.18) * 0.6 * onGlass;
   light += vec3f(0.4, 1.0, 0.3) * exp(-oliveD / 0.12) * 0.2 * onGlass;
   for (var i = 0; i < 4; i++) {
-    light += u.colA * exp(-lettersD[i] / 0.16) * 0.42 * flickerOn(f32(i), u.flicker);
+    light += u.colA * exp(-lettersD[i] / 0.16) * 0.5 * flickerOn(f32(i), u.flicker);
   }
   var col = wall * light * (2.2 + bevel * 3.0) * (0.6 + 0.4 * u.glow);
   // ---- tubes on top (back-plate shadow first)
@@ -471,14 +505,14 @@ fn signView(px: vec2f) -> vec3f {
   return col;
 }
 
-fn shade(uv: vec2f, px: vec2f) -> vec4f {
+fn shade(uv: vec2f, px0: vec2f) -> vec4f {
+  let px = uv * u.resolution;    // canvas pixels, independent of the render scale
   let ex = i32(u.example);
   var c = vec3f(0.0);
   if (ex == 0) { c = sunsetView(px); }
   else if (ex == 1) { c = arenaView(px); }
   else { c = signView(px); }
-  // filmic-ish shoulder: very bright neon cores roll off to white instead of clipping
-  c = vec3f(1.0) - exp(-c * 1.15);
+  c = softClip(c);
   if (u.crt > 0.5) {
     c *= 0.82 + 0.18 * sin(px.y * 1.6);
     let v = uv * (1.0 - uv);
@@ -529,15 +563,18 @@ export default shaderScene({
     { type: 'toggle', key: 'crt', label: 'Retro scanlines', value: true },
   ],
   uniforms: {
-    glow: 'f32', glowSize: 'f32', colA: 'vec3f', colB: 'vec3f', speed: 'f32', grid: 'f32', warp: 'f32', flicker: 'f32', crt: 'f32', look: 'f32',
+    glow: 'f32', glowSize: 'f32', colA: 'vec3f', colB: 'vec3f', speed: 'f32', grid: 'f32', warp: 'f32', flicker: 'f32', crt: 'f32', look: 'f32', onA: 'vec4f', onB: 'vec4f',
     ship: 'vec4f', en: `array<vec4f, ${N_EN}>`, enRot: `array<vec4f, ${N_EN / 4}>`, bl: `array<vec4f, ${N_BL}>`, ev: `array<vec4f, ${N_EV}>`,
   },
   include: ['math', 'hash', 'noise', 'sdf', 'color'],
+  // the headless test harness uses a software GPU: render at half resolution there
+  renderScale: () => (sim.testMode ? 0.5 : 1),
   bind(params, ctx) {
+    sim.testMode = !!ctx.testMode;
     const p = ctx.pointer;
     const target = p.over ? p.nx * 2 - 1 : 0;
     if (!ctx.paused) sim.look += (target - sim.look) * 0.04;
-    const out = { look: sim.look };
+    const out = { look: sim.look, ...tubeStates(ctx.time * params.speed, params.flicker) };
     if (ctx.example === 'arena') Object.assign(out, stepArena(ctx));
     setTag(ctx, 'info', ctx.example === 'arena' ? `${N_EN} enemies · ${sim.bl.length} bullets · ${sim.ev.length} explosions` : '', 'right:8px;bottom:8px', ctx.example === 'arena');
     return out;

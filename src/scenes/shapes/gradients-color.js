@@ -9,6 +9,51 @@ const SPACE_NAMES = ['sRGB — naive mix', 'linear light', 'OKLab — perceptual
 const BAR_NAMES = ['sRGB lerp', 'OKLab lerp', '3 stops (OKLab)'];
 const LBL = 'background:#000a;font-size:11px;padding:2px 7px;color:#dbe4f3';
 const DITHERS = ['none', 'white noise', 'IGN', 'Bayer 4×4', 'Bayer 8×8', 'triangular (TPDF)'];
+let lowRes = false; // half-resolution rendering under the (software-GPU) test harness
+
+// OKLab in JavaScript: per-frame constants (sky keyframes) are blended on the CPU, once,
+// instead of in every pixel.
+const toLin = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+const toSrgb = (c) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(Math.max(c, 0), 1 / 2.4) - 0.055);
+function rgbToOklab([r, g, b]) {
+  [r, g, b] = [toLin(r), toLin(g), toLin(b)];
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
+}
+function oklabToRgb([L, a, b]) {
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s].map((v) => Math.min(1, Math.max(0, toSrgb(v))));
+}
+const mixOk = (x, y, t) => {
+  const a = rgbToOklab(x);
+  const b = rgbToOklab(y);
+  return oklabToRgb([0, 1, 2].map((i) => a[i] + (b[i] - a[i]) * t));
+};
+const SKY_ZEN = [[0.015, 0.02, 0.07], [0.2, 0.24, 0.5], [0.14, 0.4, 0.86], [0.13, 0.1, 0.34], [0.015, 0.02, 0.07]];
+const SKY_HOR = [[0.06, 0.08, 0.2], [1.0, 0.64, 0.44], [0.68, 0.85, 0.98], [1.0, 0.45, 0.28], [0.06, 0.08, 0.2]];
+function skyState(params, time) {
+  const tod = params.cycle ? (0.62 + time * 0.025) % 1 : params.tod;
+  const seg = tod * 4;
+  const i = Math.min(3, Math.floor(seg));
+  let f = seg - Math.floor(seg);
+  f = f * f * (3 - 2 * f);
+  const zen = mixOk(SKY_ZEN[i], SKY_ZEN[i + 1], f);
+  const hor = mixOk(SKY_HOR[i], SKY_HOR[i + 1], f);
+  const a = (tod - 0.25) * Math.PI * 2;
+  const sunUp = Math.min(1, Math.max(0, (Math.sin(a) + 0.1) / 0.25));
+  const day = 0.25 + 0.75 * sunUp;
+  return {
+    zen,
+    hor,
+    hill1: mixOk([0.22 * day, 0.27 * day, 0.55 * day], hor, 0.45),
+    hill2: mixOk([0.08 * day, 0.24 * day, 0.2 * day], hor, 0.2),
+    sky: [tod, a, sunUp, day],
+  };
+}
 
 export default shaderScene({
   examples: [
@@ -80,15 +125,18 @@ export default shaderScene({
   uniforms: {
     colA: 'vec3f', colB: 'vec3f', colC: 'vec3f', space: 'f32', angle: 'f32', spread: 'f32', steps: 'f32', curve: 'f32',
     bits: 'f32', dither: 'f32', boost: 'f32', animNoise: 'f32', cycle: 'f32', tod: 'f32', autoHp: 'f32', hp: 'f32',
+    zen: 'vec3f', hor: 'vec3f', hill1: 'vec3f', hill2: 'vec3f', sky: 'vec4f',
   },
+  renderScale: () => (lowRes ? 0.5 : 1),
   include: ['color', 'hash', 'dither', 'math', 'sdf'],
   bind(params, ctx) {
+    lowRes = !!ctx.testMode;
     const ex = ctx.example;
     if (ex === 'types') {
       labels(ctx, 'types', TYPE_NAMES.map((n, i) => ({ text: n, x: ((i % 3) + 0.5) / 3, y: (Math.floor(i / 3) + 0.9) / 2, valign: 'middle', style: LBL })));
     } else if (ex === 'spaces') {
       labels(ctx, 'spaces', SPACE_NAMES.map((n, i) => ({ text: n, x: 0.035, y: 0.13 + i * 0.215, align: 'left', valign: 'middle', style: LBL }))
-        .concat([{ text: 't = 0.5', x: 0.9, y: 0.035, valign: 'top', style: LBL }]));
+        .concat([{ text: 'mix at t = 0.5', x: 0.9, y: 0.83, valign: 'top', style: LBL }]));
     } else if (ex === 'banding') {
       labels(ctx, 'banding', [
         { text: 'plain rounding', x: 0.25, y: 0.04, style: LBL },
@@ -96,6 +144,7 @@ export default shaderScene({
       ]);
     } else if (ex === 'game') {
       labels(ctx, 'game', BAR_NAMES.map((n, i) => ({ text: n, x: 0.255, y: 0.73 + i * 0.095, align: 'right', valign: 'middle', style: LBL })));
+      return skyState(params, ctx.time);
     }
     return {};
   },
@@ -147,14 +196,16 @@ fn typesView(px: vec2f) -> vec3f {
     m = clamp((u.mouse.xy - cc) / unit, vec2f(-0.6), vec2f(0.6));
   }
 
-  var col: vec3f;
+  // Collect up to three (a, b, t) mixes, then run them through ONE mixSpace call site
+  // (big inlined functions called from many places make shaders slow to compile and run).
+  var ca = array<vec3f, 3>(u.colA, u.colC, u.colA);
+  var cb = array<vec3f, 3>(u.colB, vec3f(0.97, 0.95, 0.88), u.colB);
+  var ts = array<f32, 3>(0.0, 0.0, 0.0);
+  var n = 1;
   if (id == 4) {
     let f = clamp(q * vec2f(unit / (cs.x - 24.0), unit / (cs.y - 24.0)) + vec2f(0.5), vec2f(0.0), vec2f(1.0));
-    let fx = posterize(f.x);
-    let fy = posterize(f.y);
-    let top = mixSpace(u.colA, u.colB, fx, space);
-    let bottom = mixSpace(u.colC, vec3f(0.97, 0.95, 0.88), fx, space);
-    col = mixSpace(top, bottom, fy, space);
+    ts = array<f32, 3>(posterize(f.x), posterize(f.x), posterize(f.y));
+    n = 3;
   } else {
     var t: f32;
     let dir = vec2f(cos(ang), sin(ang));
@@ -164,13 +215,21 @@ fn typesView(px: vec2f) -> vec3f {
     else if (id == 3) { let w = rot2(-ang) * (q - m); t = spreadT((abs(w.x) + abs(w.y)) / 0.42); }
     else { t = spreadT(dot(q, dir) / 0.85 + 0.5); }
     t = posterize(t);
+    ts[0] = t;
     if (id == 5) {
-      if (t < 0.5) { col = mixSpace(u.colA, u.colC, t * 2.0, space); }
-      else { col = mixSpace(u.colC, u.colB, t * 2.0 - 1.0, space); }
-    } else {
-      col = mixSpace(u.colA, u.colB, t, space);
+      if (t < 0.5) { cb[0] = u.colC; ts[0] = t * 2.0; }
+      else { ca[0] = u.colC; ts[0] = t * 2.0 - 1.0; }
     }
   }
+  var res = array<vec3f, 3>(vec3f(0.0), vec3f(0.0), vec3f(0.0));
+  for (var k = 0; k < 3; k++) {
+    if (k >= n) { break; }
+    var a = ca[k];
+    var b = cb[k];
+    if (k == 2) { a = res[0]; b = res[1]; }
+    res[k] = mixSpace(a, b, ts[k], space);
+  }
+  let col = res[n - 1];
   // rounded card
   let card = sdRoundBox(px - cc, cs * 0.5 - vec2f(8.0), 16.0);
   var c = mix(bg(px), col, cov(card, 1.0));
@@ -192,37 +251,37 @@ fn spacesView(px: vec2f) -> vec3f {
   let x1 = res.x * 0.81;
   let sx0 = res.x * 0.85;
   let sx1 = res.x * 0.95;
-  for (var i = 0; i < 4; i++) {
-    let cy = res.y * (0.13 + f32(i) * 0.215);
-    let hh = res.y * 0.075;
-    if (abs(px.y - cy) < hh + 12.0) {
-      // the strip
-      let t = clamp((px.x - x0) / (x1 - x0), 0.0, 1.0);
-      let sc = mixSpace(u.colA, u.colB, t, i);
-      let box = sdRoundBox(px - vec2f((x0 + x1) * 0.5, cy), vec2f((x1 - x0) * 0.5, hh), 10.0);
-      c = mix(c, sc, cov(box, 1.0));
-      // lightness curve and the ideal straight line
-      if (u.curve > 0.5) {
-        let la = oklabL(u.colA);
-        let lb = oklabL(u.colB);
-        let ly = cy + hh - mix(0.12, 1.88, oklabL(sc)) * hh;
-        let iy = cy + hh - mix(0.12, 1.88, mix(la, lb, t)) * hh;
-        let inside = cov(box, 1.0);
-        let dash = step(0.5, fract(px.x / 10.0));
-        c = mix(c, vec3f(0.0), cov(abs(px.y - iy) - 1.0, 1.0) * dash * inside * 0.55);
-        c = mix(c, vec3f(1.0), cov(abs(px.y - iy) - 0.5, 1.0) * dash * inside * 0.55);
-        c = mix(c, vec3f(0.0), cov(abs(px.y - ly) - 2.0, 1.0) * inside * 0.6);
-        c = mix(c, vec3f(1.0), cov(abs(px.y - ly) - 1.0, 1.0) * inside);
-      }
-      // midpoint swatch
-      let mid = mixSpace(u.colA, u.colB, 0.5, i);
-      let sw = sdRoundBox(px - vec2f((sx0 + sx1) * 0.5, cy), vec2f((sx1 - sx0) * 0.5, hh), 10.0);
-      c = mix(c, mid, cov(sw, 1.0));
-      // tick at t = 0.5 on the strip
-      let tick = max(abs(px.x - (x0 + x1) * 0.5) - 0.75, abs(px.y - cy) - hh - 6.0);
-      c = mix(c, vec3f(0.85), cov(tick, 1.0) * (1.0 - cov(box, 1.0)));
-    }
+  let hh = res.y * 0.075;
+  // which strip is this pixel in?
+  let i = i32(clamp(floor((px.y / res.y - 0.13 + 0.1075) / 0.215), 0.0, 3.0));
+  let cy = res.y * (0.13 + f32(i) * 0.215);
+  if (abs(px.y - cy) > hh + 12.0) { return c; }
+  let t = clamp((px.x - x0) / (x1 - x0), 0.0, 1.0);
+  let inSwatch = px.x > (x1 + sx0) * 0.5;
+  var tt = t;
+  if (inSwatch) { tt = 0.5; }
+  let sc = mixSpace(u.colA, u.colB, tt, i);
+  let box = sdRoundBox(px - vec2f((x0 + x1) * 0.5, cy), vec2f((x1 - x0) * 0.5, hh), 10.0);
+  let sw = sdRoundBox(px - vec2f((sx0 + sx1) * 0.5, cy), vec2f((sx1 - sx0) * 0.5, hh), 10.0);
+  c = mix(c, sc, cov(min(box, sw), 1.0));
+  // lightness curve (OKLab L of the mixed color) and the ideal straight line
+  if (u.curve > 0.5 && !inSwatch) {
+    var cl = array<vec3f, 3>(sc, u.colA, u.colB);
+    var L = array<f32, 3>(0.0, 0.0, 0.0);
+    for (var k = 0; k < 3; k++) { L[k] = oklabL(cl[k]); }
+    // lightness 0.35..0.95 mapped onto the strip height
+    let ly = cy + hh - mix(0.12, 1.88, clamp((L[0] - 0.35) / 0.6, 0.0, 1.0)) * hh;
+    let iy = cy + hh - mix(0.12, 1.88, clamp((mix(L[1], L[2], t) - 0.35) / 0.6, 0.0, 1.0)) * hh;
+    let inside = cov(box, 1.0);
+    let dash = step(0.5, fract(px.x / 10.0));
+    c = mix(c, vec3f(0.0), cov(abs(px.y - iy) - 1.0, 1.0) * dash * inside * 0.55);
+    c = mix(c, vec3f(1.0), cov(abs(px.y - iy) - 0.5, 1.0) * dash * inside * 0.55);
+    c = mix(c, vec3f(0.0), cov(abs(px.y - ly) - 2.0, 1.0) * inside * 0.6);
+    c = mix(c, vec3f(1.0), cov(abs(px.y - ly) - 1.0, 1.0) * inside);
   }
+  // tick at t = 0.5 on the strip
+  let tick = max(abs(px.x - (x0 + x1) * 0.5) - 0.75, abs(px.y - cy) - hh - 6.0);
+  c = mix(c, vec3f(0.85), cov(tick, 1.0) * (1.0 - cov(box, 1.0)));
   return c;
 }
 
@@ -255,46 +314,37 @@ fn bandingView(px: vec2f) -> vec3f {
 }
 
 // ------------------------------------------------------------------ game: sky + health bars
-fn skyKey(i: i32, zenith: bool) -> vec3f {
-  var zen = array<vec3f, 5>(vec3f(0.015, 0.02, 0.07), vec3f(0.2, 0.24, 0.5), vec3f(0.14, 0.4, 0.86), vec3f(0.13, 0.1, 0.34), vec3f(0.015, 0.02, 0.07));
-  var hor = array<vec3f, 5>(vec3f(0.06, 0.08, 0.2), vec3f(1.0, 0.64, 0.44), vec3f(0.68, 0.85, 0.98), vec3f(1.0, 0.45, 0.28), vec3f(0.06, 0.08, 0.2));
-  if (zenith) { return zen[i]; }
-  return hor[i];
-}
-
 fn hpColor(hp: f32, kind: i32) -> vec3f {
   let red = vec3f(0.9, 0.12, 0.2);
   let yellow = vec3f(1.0, 0.82, 0.2);
   let green = vec3f(0.22, 0.86, 0.36);
-  if (kind == 0) { return mix(red, green, hp); }
-  if (kind == 1) { return mixOklab(red, green, hp); }
-  if (hp < 0.5) { return mixOklab(red, yellow, hp * 2.0); }
-  return mixOklab(yellow, green, hp * 2.0 - 1.0);
+  if (kind == 0) { return mix(red, green, hp); }      // naive sRGB lerp
+  var a = red;
+  var b = green;
+  var t = hp;
+  if (kind == 2) {                                     // 3 stops: red -> yellow -> green
+    if (hp < 0.5) { b = yellow; t = hp * 2.0; } else { a = yellow; t = hp * 2.0 - 1.0; }
+  }
+  return mixOklab(a, b, t);
 }
 
 fn gameView(px: vec2f) -> vec3f {
   let res = u.resolution;
   let uv = px / res;
   let t = u.time;
-  var tod = u.tod;
-  if (u.cycle > 0.5) { tod = fract(0.62 + t * 0.025); }
-  let seg = tod * 4.0;
-  let i0 = min(i32(floor(seg)), 3);
-  let f = smoothstep(0.0, 1.0, seg - floor(seg));
-  let zen = mixOklab(skyKey(i0, true), skyKey(i0 + 1, true), f);
-  let hor = mixOklab(skyKey(i0, false), skyKey(i0 + 1, false), f);
+  // u.zen / u.hor: this frame's sky keyframe colors, already blended in OKLab on the CPU
+  let a = u.sky.y;
+  let sunUp = u.sky.z;
   let skyH = 0.64;
   let horizonY = 0.5;
   let sy = clamp(uv.y / horizonY, 0.0, 1.0);
-  var c = mixOklab(zen, hor, pow(sy, 1.6));
+  var c = mixOklab(u.zen, u.hor, pow(sy, 1.6));
 
   // sun & moon on an arc
-  let a = (tod - 0.25) * TAU;
   let aspect = res.x / res.y;
   let pp = vec2f(uv.x * aspect, uv.y);
   let sunP = vec2f(aspect * (0.5 - 0.38 * cos(a)), horizonY - 0.42 * sin(a));
   let moonP = vec2f(aspect * (0.5 + 0.38 * cos(a)), horizonY + 0.42 * sin(a));
-  let sunUp = smoothstep(-0.1, 0.15, sin(a));
   let night = 1.0 - smoothstep(-0.25, 0.1, sin(a));
   let sd = length(pp - sunP);
   c += vec3f(1.0, 0.7, 0.4) * exp(-sd * 7.0) * 0.45 * sunUp;
@@ -306,13 +356,12 @@ fn gameView(px: vec2f) -> vec3f {
   let star = step(0.997, hash21(sg)) * (0.6 + 0.4 * sin(t * 3.0 + hash21(sg + vec2f(5.0)) * 40.0));
   c += vec3f(star) * night * (1.0 - sy * 0.8);
 
-  // hills: aerial perspective = mix toward the horizon color
+  // hills: colors pre-mixed toward the horizon color (aerial perspective)
   let h1 = horizonY - 0.07 - 0.04 * sin(uv.x * 7.0 + 1.0) - 0.025 * sin(uv.x * 17.0);
   let h2 = horizonY + 0.02 - 0.05 * sin(uv.x * 4.0 + 3.0) - 0.02 * sin(uv.x * 23.0 + 1.0);
-  let dayLight = mix(0.25, 1.0, sunUp);
-  c = mix(c, mixOklab(vec3f(0.2, 0.3, 0.42) * dayLight, hor, 0.55), cov(h1 - uv.y, 1.5 / res.y));
-  c = mix(c, mixOklab(vec3f(0.1, 0.2, 0.18) * dayLight, hor, 0.25), cov(h2 - uv.y, 1.5 / res.y));
-  c = mix(c, vec3f(0.03, 0.05, 0.05) * dayLight, cov(skyH - 0.02 - uv.y + 0.03 * sin(uv.x * 9.0), 1.5 / res.y));
+  c = mix(c, u.hill1, cov(h1 - uv.y, 1.5 / res.y));
+  c = mix(c, u.hill2, cov(h2 - uv.y, 1.5 / res.y));
+  c = mix(c, vec3f(0.03, 0.05, 0.05) * u.sky.w, cov(skyH - 0.02 - uv.y + 0.03 * sin(uv.x * 9.0), 1.5 / res.y));
 
   // UI panel
   if (uv.y > skyH) {
@@ -320,36 +369,40 @@ fn gameView(px: vec2f) -> vec3f {
     c = mix(c, vec3f(0.3, 0.35, 0.45), cov(abs(px.y - skyH * res.y) - 1.0, 1.0));
   }
   var hp = u.hp;
-  if (u.autoHp > 0.5) { hp = 0.5 + 0.5 * cos(t * 0.45); }
+  if (u.autoHp > 0.5) { hp = 0.5 + 0.5 * cos(t * 0.45 + 1.75); }
   let bx0 = res.x * 0.27;
   let bx1 = res.x * 0.93;
-  for (var i = 0; i < 3; i++) {
-    let cy = res.y * (0.73 + f32(i) * 0.095);
-    let bh = res.y * 0.024;
-    if (abs(px.y - cy) < bh + res.y * 0.03) {
-      let bw = (bx1 - bx0) * 0.5;
-      let box = sdRoundBox(px - vec2f(bx0 + bw, cy), vec2f(bw, bh), bh);
-      c = mix(c, vec3f(0.0), cov(box - 3.0, 1.0) * 0.8);
-      c = mix(c, vec3f(0.12, 0.1, 0.13), cov(box, 1.0));
-      let hc = hpColor(hp, i);
-      let low = 1.0 - smoothstep(0.15, 0.3, hp);
-      let pulse = 1.0 + low * 0.35 * (0.5 + 0.5 * sin(t * 12.0));
-      let fill = cov(px.x - (bx0 + 2.0 * bw * hp), 1.0) * cov(box + 2.0, 1.0);
-      let gloss = 1.0 + 0.25 * smoothstep(cy + bh * 0.1, cy - bh, px.y);
-      c = mix(c, min(hc * gloss * pulse, vec3f(1.0)), fill);
-      // full ramp preview underneath
-      let ry = cy + bh + res.y * 0.014;
-      let rt = clamp((px.x - bx0) / (bx1 - bx0), 0.0, 1.0);
-      let ramp = sdRoundBox(px - vec2f(bx0 + bw, ry), vec2f(bw, res.y * 0.005), res.y * 0.005);
-      c = mix(c, hpColor(rt, i), cov(ramp, 1.0));
-      let mk = max(abs(px.x - (bx0 + 2.0 * bw * hp)) - 1.0, abs(px.y - ry) - res.y * 0.011);
-      c = mix(c, vec3f(1.0), cov(mk, 1.0));
-    }
+  let bh = res.y * 0.024;
+  let bw = (bx1 - bx0) * 0.5;
+  // which bar row is this pixel in?
+  let i = i32(clamp(floor((uv.y - 0.73 + 0.0475) / 0.095), 0.0, 2.0));
+  let cy = res.y * (0.73 + f32(i) * 0.095);
+  if (uv.y > skyH && abs(px.y - cy) < bh + res.y * 0.03) {
+    let ry = cy + bh + res.y * 0.014;
+    let rt = clamp((px.x - bx0) / (bx1 - bx0), 0.0, 1.0);
+    let inRamp = px.y > cy + bh + 2.0;
+    var ht = hp;
+    if (inRamp) { ht = rt; }
+    let hc = hpColor(ht, i);
+    let box = sdRoundBox(px - vec2f(bx0 + bw, cy), vec2f(bw, bh), bh);
+    c = mix(c, vec3f(0.0), cov(box - 3.0, 1.0) * 0.8);
+    c = mix(c, vec3f(0.12, 0.1, 0.13), cov(box, 1.0));
+    let low = 1.0 - smoothstep(0.15, 0.3, hp);
+    let pulse = 1.0 + low * 0.35 * (0.5 + 0.5 * sin(t * 12.0));
+    let fill = cov(px.x - (bx0 + 2.0 * bw * hp), 1.0) * cov(box + 2.0, 1.0);
+    let gloss = 1.0 + 0.25 * smoothstep(cy + bh * 0.1, cy - bh, px.y);
+    c = mix(c, min(hc * gloss * pulse, vec3f(1.0)), fill);
+    // the full ramp underneath, with a marker at the current HP
+    let ramp = sdRoundBox(px - vec2f(bx0 + bw, ry), vec2f(bw, res.y * 0.005), res.y * 0.005);
+    c = mix(c, hc, cov(ramp, 1.0));
+    let mk = max(abs(px.x - (bx0 + 2.0 * bw * hp)) - 1.0, abs(px.y - ry) - res.y * 0.011);
+    c = mix(c, vec3f(1.0), cov(mk, 1.0));
   }
   return c;
 }
 
-fn shade(uv: vec2f, px: vec2f) -> vec4f {
+fn shade(uv: vec2f, px0: vec2f) -> vec4f {
+  let px = uv * u.resolution;   // canvas pixels, even when rendering at reduced resolution
   let ex = i32(u.example);
   var c: vec3f;
   if (ex == 0) { c = typesView(px); }

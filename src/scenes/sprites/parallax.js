@@ -9,7 +9,7 @@ let camY = 0;
 let testMode = false;
 
 export default shaderScene({
-  interaction: 'Move the mouse up/down for vertical parallax · drag left/right to scrub the camera.',
+  interaction: 'Mouse up/down: vertical parallax · drag: scrub the camera.',
   examples: [
     {
       id: 'forest',
@@ -42,7 +42,7 @@ export default shaderScene({
   ],
   uniforms: { speed: 'f32', strength: 'f32', layers: 'f32', fog: 'f32', vertical: 'f32', debug: 'f32', camX: 'f32', camY: 'f32' },
   include: ['noise', 'sdf', 'color'],
-  renderScale: () => (testMode ? 0.5 : 1),
+  renderScale: () => (testMode ? 0.3 : 1),
   bind(params, ctx) {
     testMode = ctx.testMode;
     camX += params.speed * ctx.dt;
@@ -57,12 +57,18 @@ struct LayerOut { col: vec3f, cov: f32, glow: vec3f };
 fn aaf(d: f32, pw: f32) -> f32 { return clamp(0.5 - d / pw, 0.0, 1.0); }
 
 // ------------------------------------------------------------------ forest
+// cheap pine silhouette: two stacked triangles + trunk as an approximate signed distance (no full triangle SDF)
 fn pine(p: vec2f, base: vec2f, h: f32) -> f32 {
+  let dx = abs(p.x - base.x);
   let w = h * 0.36;
-  let t1 = sdTriangle(p, base + vec2f(-w, -h * 0.12), base + vec2f(w, -h * 0.12), base + vec2f(0.0, -h * 0.68));
-  let t2 = sdTriangle(p, base + vec2f(-w * 0.75, -h * 0.42), base + vec2f(w * 0.75, -h * 0.42), base + vec2f(0.0, -h));
-  let trunk = sdBox(p - (base + vec2f(0.0, -h * 0.02)), vec2f(w * 0.12, h * 0.12));
-  return min(min(t1, t2), trunk);
+  let s1 = w / (h * 0.56);                       // half-width per unit of height, lower tier
+  let s2 = w * 0.75 / (h * 0.58);                // upper tier
+  let k1 = 1.0 / sqrt(1.0 + s1 * s1);
+  let k2 = 1.0 / sqrt(1.0 + s2 * s2);
+  let lower = max((dx - (p.y - (base.y - h * 0.68)) * s1) * k1, p.y - (base.y - h * 0.12));
+  let upper = max((dx - (p.y - (base.y - h)) * s2) * k2, p.y - (base.y - h * 0.42));
+  let trunk = max(dx - w * 0.12, abs(p.y - (base.y - h * 0.02)) - h * 0.12);
+  return min(min(lower, upper), trunk);
 }
 
 fn skyForest(p: vec2f, aspect: f32) -> vec3f {
@@ -269,8 +275,8 @@ fn spaceLayer(t: f32, q: vec2f, seed: f32, pw: f32) -> LayerOut {
 fn shade(uv: vec2f, px: vec2f) -> vec4f {
   let res = u.resolution;
   let aspect = res.x / res.y;
-  let p = px / res.y;
-  let pw = 1.6 / res.y;
+  let p = vec2f(uv.x * aspect, uv.y);          // y 0..1 down, x 0..aspect (independent of render scale)
+  let pw = max(fwidth(p.y), 0.0005) * 1.6;      // ~1.6 pixels, for anti-aliased edges
   let ex = i32(u.example + 0.5);
   let n = i32(u.layers + 0.5);
   var haze = vec3f(0.1, 0.06, 0.18);

@@ -262,46 +262,54 @@ fn giraffe(lp: vec2f) -> vec3f {
   let bd = vborder(p, 0.8, 0.0);
   let h = hash21(v.id + 4.0);
   let cream = vec3f(0.95, 0.88, 0.72) * (0.92 + 0.08 * perlin(lp * 40.0));
-  var patch = mix(vec3f(0.62, 0.33, 0.12), vec3f(0.5, 0.25, 0.09), h);
-  patch = mix(patch * 0.8, patch * 1.1, smoothstep(0.05, 0.35, bd));
-  patch *= 0.9 + 0.1 * perlin(p * 9.0);
+  var spot = mix(vec3f(0.62, 0.33, 0.12), vec3f(0.5, 0.25, 0.09), h);
+  spot = mix(spot * 0.8, spot * 1.1, smoothstep(0.05, 0.35, bd));
+  spot *= 0.9 + 0.1 * perlin(p * 9.0);
   let w = 0.1 + 0.02 * perlin(p * 3.0);
-  return mix(cream, patch, smoothstep(w, w + 0.025, bd));
+  return mix(cream, spot, smoothstep(w, w + 0.025, bd));
 }
 
-// staggered (hexagonal) lattice so the cells look like overlapping scales
+// overlapping scales: rows of circles on a staggered lattice; the first row (top) is in FRONT,
+// so every scale shows its rounded bottom edge over the next row
 fn dragonScales(lp: vec2f, t: f32) -> vec3f {
-  let p = lp * u.scale * vec2f(0.9, 1.2) + vec2f(u.seed * 7.0, 0.0);
-  let row0 = floor(p.y);
-  var f1 = 8.0;
-  var f2 = 8.0;
-  var cp = vec2f(0.0);
+  let p = lp * u.scale * 0.6 + vec2f(u.seed * 7.0, 0.0);
+  let rs = 0.55;
+  let rad = 0.62;
+  let row0 = floor(p.y / rs);
+  var found = 0.0;
+  var cq = vec2f(0.0);
   var cid = vec2f(0.0);
-  for (var j = -1; j <= 1; j++) {
+  var dEdge = 1.0;
+  for (var j = -2; j <= 0; j++) {
     let row = row0 + f32(j);
     let sh = 0.5 * fmod(row, 2.0);
     let c0 = floor(p.x - sh);
     for (var i = -1; i <= 1; i++) {
-      let col = c0 + f32(i);
-      let h = hash22(vec2f(col, row) + 5.0);
-      // scale "center" sits low in the cell so the rounded bottom overlaps the next row
-      let pt = vec2f(col + sh + 0.5 + (h.x - 0.5) * 0.15, row + 0.35 + (h.y - 0.5) * 0.1);
-      let d = length((p - pt) * vec2f(1.0, 1.25));
-      if (d < f1) { f2 = f1; f1 = d; cp = pt; cid = vec2f(col, row); } else if (d < f2) { f2 = d; }
+      let cx = c0 + f32(i);
+      let ctr = vec2f(cx + sh + 0.5, row * rs + rs);
+      let d = length(p - ctr);
+      if (found < 0.5 && d < rad) {
+        found = 1.0;
+        cq = (p - ctr) / rad;
+        cid = vec2f(cx, row);
+        dEdge = rad - d;
+      }
     }
   }
-  let rel = (p - cp) * vec2f(1.0, 1.25);
-  let dome = clamp(1.0 - f1 * 1.3, 0.0, 1.0);
-  let n = normalize(vec3f(rel * 2.2, 0.6 + dome));
-  let L = normalize(vec3f(-0.5, -0.6, 0.65));
-  let diff = max(dot(n, L), 0.0);
-  let spec = pow(max(dot(reflect(-L, n), vec3f(0.0, 0.0, 1.0)), 0.0), 24.0);
   let hh = hash21(cid);
-  // iridescence: hue depends on the surface angle
-  let irid = palette(0.35 + 0.25 * n.x + 0.2 * n.y + hh * 0.1 + 0.05 * sin(t), vec3f(0.3, 0.45, 0.3), vec3f(0.25, 0.3, 0.2), vec3f(1.0, 1.0, 1.0), vec3f(0.1, 0.25, 0.45));
-  var c = irid * (0.25 + 0.95 * diff) + vec3f(1.0, 0.95, 0.8) * spec * 0.7;
-  // dark crevices between the scales
-  c *= smoothstep(0.0, 0.12, f2 - f1);
+  // dome normal from the position inside the scale
+  let n = normalize(vec3f(cq * 1.1, 0.8));
+  let L = normalize(vec3f(-0.45, -0.7, 0.6));
+  let diff = max(dot(n, L), 0.0);
+  let spec = pow(max(dot(reflect(-L, n), vec3f(0.0, 0.0, 1.0)), 0.0), 20.0);
+  let irid = palette(0.42 + 0.22 * cq.x + 0.18 * cq.y + hh * 0.12 + 0.04 * sin(t + hh * 6.0), vec3f(0.3, 0.45, 0.32), vec3f(0.25, 0.3, 0.22), vec3f(1.0, 1.0, 1.0), vec3f(0.1, 0.25, 0.45));
+  var c = irid * (0.4 + 1.05 * diff) + vec3f(1.0, 0.95, 0.8) * spec * 0.6;
+  // the upper part tucks under the previous row: shadow it
+  c *= 0.45 + 0.55 * smoothstep(-0.55, 0.25, cq.y);
+  // dark rim + a thin bright lip just inside it
+  let ew = dEdge * u.resolution.y * 0.5 / (u.scale * 0.6);
+  c = mix(c, c * 1.5 + 0.08, (1.0 - smoothstep(1.5, 4.0, ew)) * smoothstep(0.2, 0.6, cq.y) * 0.5);
+  c *= smoothstep(0.0, 1.6, ew) * 0.85 + 0.15;
   return c;
 }
 
@@ -420,7 +428,7 @@ fn exTerritory(px: vec2f) -> vec3f {
     let k0 = floor(ang / (PI / 3.0));
     for (var e = 0; e < 2; e++) {
       let k = k0 + f32(e);
-      let a = (k + 0.5) * PI / 3.0;
+      let a = k * PI / 3.0;
       let nd = vec2f(cos(a), sin(a));
       let nb = nearestCity(hc + nd * s * 1.7320508);
       let distEdge = s * 0.8660254 - dot(rel, nd);

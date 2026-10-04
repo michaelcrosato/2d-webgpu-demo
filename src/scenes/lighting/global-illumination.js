@@ -272,14 +272,14 @@ export default {
       label: 'Lava cave',
       kind: 'In a game',
       note: 'A river of lava and a few crystals are the only light sources. The cave walls catch orange from below and cyan from above — the mix happens automatically because every surface gathers light from every direction.',
-      params: { material: 'wall', brushColor: '#9a8070', rays: 16, bounce: 0.8, history: 0.85, exposure: 1.0, view: 'final' },
+      params: { material: 'wall', brushColor: '#9a8070', rays: 16, bounce: 0.8, history: 0.85, exposure: 0.65, view: 'final' },
     },
     {
       id: 'neon',
       label: 'Neon signs in the dark',
       kind: 'In a game',
       note: 'Flickering neon tubes light a dark alley. A passer-by blocks the light and casts soft moving shadows; the magenta panel spills color onto the ground. Raise “Rays per pixel” for less noise.',
-      params: { material: 'light', brushColor: '#60f0ff', rays: 16, bounce: 0.7, history: 0.85, exposure: 1.0, view: 'final' },
+      params: { material: 'light', brushColor: '#60f0ff', rays: 16, bounce: 0.7, history: 0.85, exposure: 0.5, view: 'final' },
     },
   ],
   controls: [

@@ -16,6 +16,8 @@ const OPS = [
 ];
 const LABEL_STYLE = 'background:#0009;border-color:#ffffff14;font-size:11px;padding:2px 7px;color:#dbe4f3';
 
+let lowRes = false; // half-resolution rendering under the (software-GPU) test harness
+
 function lensState(ctx) {
   const p = ctx.pointer;
   const R = ctx.height * 0.2;
@@ -79,7 +81,9 @@ export default shaderScene({
     uiScale: 'f32', lensZoom: 'f32', compare: 'f32', lens: 'vec4f',
   },
   include: ['sdf', 'math', 'noise'],
+  renderScale: () => (lowRes ? 0.5 : 1),
   bind(params, ctx) {
+    lowRes = !!ctx.testMode;
     const ex = ctx.example;
     if (ex === 'zoo') {
       labels(ctx, 'zoo', ZOO.map((n, i) => ({ text: n, x: ((i % 5) + 0.5) / 5, y: (Math.floor(i / 5) + 0.88) / 3, valign: 'middle', style: LABEL_STYLE })));
@@ -496,7 +500,8 @@ fn hudView(px: vec2f) -> vec3f {
   return c;
 }
 
-fn shade(uv: vec2f, px: vec2f) -> vec4f {
+fn shade(uv: vec2f, px0: vec2f) -> vec4f {
+  let px = uv * u.resolution;   // canvas pixels, even when rendering at reduced resolution
   let ex = i32(u.example);
   var c: vec3f;
   if (ex == 0) { c = zooView(px); }

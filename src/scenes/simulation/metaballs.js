@@ -59,8 +59,24 @@ fn evalField(q: vec2f) -> vec4f {
       }
     }
   }
-  let gl = max(length(g), 0.0001);
-  return vec4f((u.threshold - f) / gl, -g / gl, f);  // first-order distance to the iso-line
+  // Distance estimate. (T - F)/|grad F| is only accurate right at the surface, so first remap the field
+  // with G(F) that is exactly linear in distance for a lone blob (G = d/r), then divide by |grad G|.
+  let gl = max(length(g), 0.0000001);
+  var G = 0.0;
+  var GT = 0.0;
+  var dG = 0.0;
+  if (mode == 0) {
+    G = inverseSqrt(max(f, 0.000001));
+    GT = inverseSqrt(max(u.threshold, 0.000001));
+    dG = 0.5 * pow(max(f, 0.000001), -1.5);
+  } else {
+    let c = pow(max(f, 0.000001) / 2.370370, 1.0 / 3.0);
+    let ct = pow(max(u.threshold, 0.000001) / 2.370370, 1.0 / 3.0);
+    G = sqrt(max(1.0 - c, 0.0001));
+    GT = sqrt(max(1.0 - ct, 0.0001));
+    dG = c / (6.0 * max(f, 0.000001) * G);
+  }
+  return vec4f((G - GT) / max(dG * gl, 0.0001), -g, f);   // yz = outward (unnormalised) field gradient
 }
 // each ball's color, weighted by its share of the field
 fn evalColor(q: vec2f) -> vec3f {
@@ -79,11 +95,20 @@ fn evalColor(q: vec2f) -> vec3f {
   }
   return cs / max(ws, 0.000001);
 }
-// Fake 3D: treat the blob as a dome whose height comes from the distance to the edge.
-fn blobNormal(d: f32, g: vec2f, R0: f32) -> vec3f {
-  let s = clamp(R0 + d, 0.0, R0);
-  let z = sqrt(max(R0 * R0 - s * s, 0.0));
-  let n = normalize(vec3f(g * s, z + 0.00001));
+// Fake 3D: give the blob a height and light it.
+//  - field modes: height H = 1 - exp(-(F - T)) rises smoothly from the edge; its gradient is smooth everywhere
+//  - smooth-min SDF: a dome whose height comes from the distance to the edge
+fn blobNormal(d: f32, g: vec2f, f: f32, R0: f32) -> vec3f {
+  var n = vec3f(0.0, 0.0, 1.0);
+  if (i32(u.fieldFn + 0.5) == 2) {
+    let s = clamp(R0 + d, 0.0, R0);
+    let z = sqrt(max(R0 * R0 - s * s, 0.0));
+    n = normalize(vec3f(normalize(g + vec2f(0.0000001, 0.0)) * s, z + 0.00001));
+  } else {
+    let T = max(u.threshold, 0.001);
+    let tilt = g * exp(-max(f - T, 0.0) * 1.5 / T) * 1.5 / T * R0;
+    n = normalize(vec3f(tilt, 1.0));
+  }
   return normalize(mix(vec3f(0.0, 0.0, 1.0), n, u.shading));
 }
 fn shadeBlob(n: vec3f, base: vec3f) -> vec3f {
@@ -104,7 +129,7 @@ fn fieldViz(f: f32, d: f32) -> vec3f {
   c = mix(c, vec3f(0.92, 0.3, 0.16), smoothstep(0.28, 0.6, h));
   c = mix(c, vec3f(1.0, 0.92, 0.45), smoothstep(0.58, 1.0, h));
   let vv = v * 4.0;
-  let iso = 1.0 - smoothstep(0.0, 1.2, abs(fract(vv + 0.5) - 0.5) / max(fwidth(vv), 0.0001));
+  let iso = (1.0 - smoothstep(0.0, 1.2, abs(fract(vv + 0.5) - 0.5) / max(fwidth(vv), 0.0001))) * (1.0 - smoothstep(2.0, 3.5, v));
   c = mix(c, c * 0.45 + vec3f(0.12), iso * 0.6);
   return c;
 }
@@ -134,7 +159,7 @@ ${HEAD}
   if (u.showField > 0.5) { col = fieldViz(f, d); }
   let a = aaq(d);
   let base = evalColor(q);
-  let lit = shadeBlob(blobNormal(d, g, 0.05), base);
+  let lit = shadeBlob(blobNormal(d, g, f, 0.05), base);
   col = mix(col, lit, a * mix(1.0, 0.55, u.showField));
   // the threshold iso-line = the visible surface
   col = mix(col, vec3f(1.0), (1.0 - smoothstep(0.6, 1.6, abs(d) * res.y)) * 0.9 * u.showField);
@@ -201,7 +226,7 @@ ${HEAD}
     // wax: translucent, glowing more where it is hot (near the bottom)
     let a = aaq(d);
     if (a > 0.0) {
-      let n = blobNormal(d, g, 0.06);
+      let n = blobNormal(d, g, f, 0.05);
       let thick = clamp(-d / 0.05, 0.0, 1.0);
       var wc = shadeBlob(n, wax * mix(0.7, 1.15, thick));
       wc += wax * vec3f(1.0, 0.75, 0.5) * (1.0 - hgt) * 0.45;           // heat glow
@@ -259,7 +284,7 @@ ${HEAD}
   // the slime: glossy, slightly translucent goo
   let a = aaq(d);
   if (a > 0.0) {
-    let n = blobNormal(d, g, 0.07);
+    let n = blobNormal(d, g, f, 0.06);
     let thick = clamp(-d / 0.08, 0.0, 1.0);
     var sc = shadeBlob(n, mix(u.tint * 1.25, u.tint * 0.55, thick));
     sc = mix(col * u.tint * 1.6, sc, 0.55 + 0.45 * thick);          // see-through near the edges
@@ -333,11 +358,12 @@ ${HEAD}
   // goo
   let a = aaq(d);
   if (a > 0.0) {
-    let n = blobNormal(d, g, 0.035);
+    let n = blobNormal(d, g, f, 0.035);
     var gc = shadeBlob(n, evalColor(q));
     // icons on top of their buttons
     for (var i = 0; i < 13; i++) {
       if (i == 5 || i == 6 || i == 7) { continue; }
+      if (i >= 9 && u.extra[0].x < 0.35) { continue; }      // action-menu icons only when it is open
       let b = u.balls[i];
       let r = max(b.z * u.blobSize, 0.001);
       var id = i;
@@ -417,8 +443,8 @@ function fieldSim() {
 function lavaSim() {
   const halfW = (y) => (y < 0.1 ? 0.068 + (0.145 - 0.068) * clamp((y + 0.36) / 0.46, 0, 1) : 0.145 + (0.115 - 0.145) * clamp((y - 0.1) / 0.12, 0, 1));
   const wax = [];
-  for (let i = 0; i < 9; i++) {
-    wax.push({ x: rand(-0.05, 0.05), y: rand(-0.3, 0.18), vx: 0, vy: 0, r: rand(0.032, 0.058), T: Math.random(), seed: rand(0, 100) });
+  for (let i = 0; i < 8; i++) {
+    wax.push({ x: rand(-0.04, 0.04), y: rand(-0.3, 0.18), vx: 0, vy: 0, r: rand(0.026, 0.046), T: Math.random(), seed: rand(0, 100) });
   }
   let t = 0;
   return {
@@ -458,9 +484,9 @@ function lavaSim() {
           }
         }
       const pool = [
-        [-0.072, 0.215, 0.07, -1],
-        [0.0, 0.225, 0.075, -1],
-        [0.072, 0.215, 0.07, -1],
+        [-0.07, 0.228, 0.055, -1],
+        [0.0, 0.235, 0.06, -1],
+        [0.07, 0.228, 0.055, -1],
       ];
       return [...pool, ...wax.map((b) => [b.x, b.y, b.r, -1])];
     },
@@ -788,8 +814,8 @@ export default {
         two nearby blobs add up between them and the surface swells into a neck that eventually connects them.</li>
       <li><b>Anti-aliasing</b>: dividing <code>(T − F)</code> by the field’s gradient length gives an approximate distance to the surface
         in pixels — a crisp, smooth edge at any resolution.</li>
-      <li><b>Fake 3D</b>: treat the blob as a dome: the deeper inside (distance to the edge), the higher. The normal tilts outward along
-        the field gradient near the rim. Then use ordinary diffuse + specular + rim lighting.</li>
+      <li><b>Fake 3D</b>: turn the field into a height (0 at the edge, rising inside). Its gradient tilts the surface normal outward near the
+        rim and flattens it deep inside — then use ordinary diffuse + specular + rim lighting. (For the smooth-min SDF the height comes from the distance to the edge: a dome.)</li>
       <li><b>Color blending</b>: weight each blob’s color by its share of the field, so colors flow into each other where blobs merge.</li>
       <li><b>Relation to SDFs</b>: a smooth-minimum of circle distance functions (<code>smin(d₁, d₂, k)</code>) gives a very similar
         look with a <i>true</i> distance field (great for outlines and glows) — pick “Smooth-min” to compare. The Wyvill kernel has
@@ -840,13 +866,16 @@ let gl = max(length(g), 0.0001);
 let dist = (u.threshold - f) / gl;           // < 0 inside, ≈ distance to the surface`,
       },
       {
-        title: 'Fake 3D dome lighting from the distance',
+        title: 'Fake 3D: a smooth height from the field',
         lang: 'wgsl',
-        src: `fn blobNormal(d: f32, g: vec2f, R0: f32) -> vec3f {
-  let s = clamp(R0 + d, 0.0, R0);         // 0 deep inside .. R0 at the edge
-  let z = sqrt(max(R0 * R0 - s * s, 0.0));  // a sphere-like profile
-  return normalize(vec3f(g * s, z + 0.00001));
-}`,
+        src: `// height H = 1 - exp(-(F - T)): 0 at the edge, rising smoothly inside.
+// Its gradient (chain rule) tilts the normal outward near the rim and flattens deep inside.
+let T = max(u.threshold, 0.001);
+let tilt = g * exp(-max(f - T, 0.0) * 1.5 / T) * 1.5 / T * R0;   // g = outward field gradient
+let n = normalize(vec3f(tilt, 1.0));
+let diff = max(dot(n, L), 0.0);
+let spec = pow(max(dot(n, H), 0.0), u.gloss);
+let rim  = pow(1.0 - n.z, 2.0) * u.rim;`,
       },
     ],
     links: [

@@ -65,39 +65,43 @@ fn underwaterOffset(p: vec2f) -> vec2f {
                0.7 * cos(p.x * 8.0 * k + t * 1.3) + 0.3 * sin(p.x * 23.0 * k + t * 2.1)) * u.strength * 0.006;
 }
 
-// raindrops on a window: xy = where to look inside the drop (p units), z = drop mask
-fn raindrops(p: vec2f) -> vec3f {
-  var best: vec3f = vec3f(0.0, 0.0, 0.0);
+// raindrops on a window: xy = where to look inside the drop (p units), z = drop mask, w = specular highlight
+fn raindrops(p: vec2f) -> vec4f {
+  var best: vec4f = vec4f(0.0);
   let t: f32 = u.time * u.speed;
   let k: f32 = u.scale;
-  // static beads
-  let g: f32 = 0.075 / k;
+  // static beads, one candidate per grid cell (some cells stay dry)
+  let g: f32 = 0.085 / k;
   let cell: vec2f = floor(p / g);
   for (var j = -1; j <= 1; j++) {
     for (var i = -1; i <= 1; i++) {
       let id: vec2f = cell + vec2f(f32(i), f32(j));
       let h: vec3f = hash23(id);
       let c: vec2f = (id + 0.2 + 0.6 * h.xy) * g;
-      let rad: f32 = g * (0.12 + 0.22 * h.z * h.z);
+      let rad: f32 = g * (0.1 + 0.32 * h.z * h.z);
       let d: vec2f = (p - c) * vec2f(1.0, 0.85);
       let r: f32 = length(d) / rad;
-      if (r < 1.0 && h.z > 0.25) {
-        // a drop is a tiny fish-eye lens: it shows a flipped, shrunken view of what is behind it
-        best = vec3f(c - d * 2.2 + vec2f(0.0, -rad * 0.6), smoothstep(1.0, 0.8, r));
+      if (r < 1.0 && h.z > 0.45) {
+        // a drop is a tiny fish-eye lens: it shows a flipped, shrunken view of a wider area behind it
+        let spec: f32 = 1.0 - smoothstep(0.0, 0.28, length(d / rad - vec2f(-0.35, -0.42)));
+        best = vec4f(c - d * 4.5 - vec2f(0.0, rad * 1.5), smoothstep(1.0, 0.75, r), spec);
       }
     }
   }
-  // sliding drops with a wet trail
-  let colW: f32 = 0.11 / k;
+  // sliding drops
+  let colW: f32 = 0.13 / k;
   let col: f32 = floor(p.x / colW);
   let hc: vec3f = hash23(vec2f(col, 17.0));
   let x0: f32 = (col + 0.3 + 0.4 * hc.x) * colW;
-  let y0: f32 = fract(t * (0.12 + 0.25 * hc.y) + hc.z) * 1.4 - 0.2;
+  let y0: f32 = fract(t * (0.08 + 0.2 * hc.y) + hc.z) * 1.4 - 0.2;
   let wob: f32 = 0.006 * sin(p.y * 40.0 + col);
-  let rad2: f32 = 0.018 / k;
-  let dd: vec2f = (p - vec2f(x0 + wob, y0)) * vec2f(1.0, 0.75);
+  let rad2: f32 = 0.022 / k;
+  let dd: vec2f = (p - vec2f(x0 + wob, y0)) * vec2f(1.0, 0.7);
   let r2: f32 = length(dd) / rad2;
-  if (r2 < 1.0 && hc.z > 0.35) { best = vec3f(vec2f(x0, y0) - dd * 2.4, smoothstep(1.0, 0.8, r2)); }
+  if (r2 < 1.0 && hc.z > 0.4) {
+    let spec2: f32 = 1.0 - smoothstep(0.0, 0.28, length(dd / rad2 - vec2f(-0.35, -0.42)));
+    best = vec4f(vec2f(x0, y0) - dd * 4.5, smoothstep(1.0, 0.75, r2), spec2);
+  }
   return best;
 }
 
@@ -189,13 +193,14 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
       let vr: f32 = length(p - c) / (0.5 * a);
       col *= 1.0 - 0.45 * smoothstep(0.4, 1.1, vr) * u.strength;
     } else {
-      let rd: vec3f = raindrops(p);
+      let rd: vec4f = raindrops(p);
       q = mix(p, rd.xy, rd.z);
       col = TEX(game, toUV(q)).rgb;
-      // fogged glass between the drops; drops get a dark rim and a highlight
-      let fogged: vec3f = mix(col, vec3f(luma(col)) * 0.9 + vec3f(0.05, 0.06, 0.08), 0.35);
-      col = mix(fogged, col * 1.08, rd.z);
-      shadeK = 1.0 - 0.35 * rd.z * (1.0 - rd.z) * 4.0;
+      // fogged glass between the drops; drops get a dark rim and a specular highlight
+      let fogged: vec3f = mix(col, vec3f(luma(col)) * 0.85 + vec3f(0.06, 0.07, 0.09), 0.4);
+      col = mix(fogged, col * 1.1, rd.z);
+      shadeK = 1.0 - 0.5 * rd.z * (1.0 - rd.z) * 4.0;
+      extra = vec3f(1.0) * rd.w * rd.z * 0.7;
     }
   } else if (ex == 2) {
     q = lens(p, m, u.lensMode);
