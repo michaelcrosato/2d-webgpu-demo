@@ -63,7 +63,8 @@ fn motif(q: vec2f, id: vec2f, t: f32) -> vec3f {
   c = mix(c, vec3f(0.08, 0.3, 0.3), sdfFill(max(vein, leaf + 0.02)));
   // a dot in one corner + a little triangle pointing right: breaks the symmetry
   c = mix(c, vec3f(1.0, 0.75, 0.3), sdfFill(length(q - vec2f(-0.3, -0.3)) - 0.075));
-  let tri = sdTriangle(q, vec2f(0.26, 0.18), vec2f(0.26, 0.38), vec2f(0.42, 0.28));
+  let tq = q - vec2f(0.32, 0.28);
+  let tri = sdEquilateralTriangle(vec2f(tq.y, -tq.x), 0.085);
   c = mix(c, vec3f(1.0, 0.45, 0.55), sdfFill(tri));
   // cell border
   let e = 0.5 - max(abs(q.x), abs(q.y));
