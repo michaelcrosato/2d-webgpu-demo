@@ -33,12 +33,13 @@ function lensState(ctx) {
 }
 
 export default shaderScene({
-  interaction: 'Zoo: turn on “Show distance field” and hover a shape. Booleans: the mouse moves the circle. HUD: the mouse is a magnifying glass.',
+  interaction: 'Hover the shapes. On “Booleans” the mouse moves the circle; on the HUD it is a magnifier.',
   examples: [
     {
       id: 'zoo',
       label: 'Shape zoo',
       kind: 'Abstract',
+      hint: 'Turn on “Show distance field”, then hover a shape: the yellow circle’s radius is the distance.',
       note: 'Fifteen shapes, each a few lines of math returning the <b>signed distance</b> to its edge: negative inside, positive outside, zero on the border. Rounding, onion rings, outlines and glow are all one-line tweaks of that number.',
     },
     {
@@ -46,6 +47,7 @@ export default shaderScene({
       label: 'Booleans & smooth blending',
       kind: 'Abstract',
       note: 'Combine two distance fields with <code>min</code>/<code>max</code> to get union, subtraction and intersection. The bottom row uses <b>smooth</b> versions that melt the shapes together over a radius <i>k</i>. Move the mouse to push the circle around.',
+      hint: 'Move the mouse to push the circle around.',
       params: { outline: 0, glow: 0.25 },
     },
     {
@@ -53,6 +55,7 @@ export default shaderScene({
       label: 'Crisp vector HUD',
       kind: 'In a game',
       note: 'Every icon, pin, badge and reticle here is an SDF evaluated per pixel — no textures. The magnifier proves it: the left half re-evaluates the math at the zoomed position (always sharp), the right half shows what a bitmap of the same HUD would look like (blurry texels).',
+      hint: 'The mouse is a magnifier: left half SDF, right half bitmap.',
       params: { glow: 0.5 },
     },
   ],
@@ -67,8 +70,8 @@ export default shaderScene({
     { type: 'toggle', key: 'spin', label: 'Rotate shapes', value: true, showFor: ['zoo'] },
     { type: 'color', key: 'tint', label: 'Fill color', value: '#f472b6', showFor: ['zoo', 'boolean'] },
     { type: 'heading', label: 'HUD', showFor: ['hud'] },
-    { type: 'slider', key: 'uiScale', label: 'UI scale', min: 0.5, max: 2.5, step: 0.01, value: 1, showFor: ['hud'], help: 'Like a game’s “HUD size” option. SDF icons are re-rendered at the new size, not resampled.' },
-    { type: 'slider', key: 'lensZoom', label: 'Magnifier zoom', min: 1, max: 16, step: 0.1, value: 6, log: true, showFor: ['hud'], format: (v) => `${v.toFixed(1)}×` },
+    { type: 'slider', key: 'uiScale', label: 'UI scale', min: 0.5, max: 2.5, step: 0.01, value: 1.25, showFor: ['hud'], help: 'Like a game’s “HUD size” option. SDF icons are re-rendered at the new size, not resampled.' },
+    { type: 'slider', key: 'lensZoom', label: 'Magnifier zoom', min: 1, max: 16, step: 0.1, value: 5, log: true, showFor: ['hud'], format: (v) => `${v.toFixed(1)}×` },
     { type: 'toggle', key: 'compare', label: 'Split: SDF | bitmap', value: true, showFor: ['hud'], help: 'Right half of the lens: the same HUD as a fixed-resolution image, scaled up with bilinear filtering.' },
   ],
   uniforms: {
@@ -126,7 +129,7 @@ fn zooShape(id: i32, q: vec2f) -> f32 {
 fn fieldColor(d: f32, pw: f32) -> vec3f {
   var c = mix(vec3f(0.93, 0.62, 0.33), vec3f(0.42, 0.7, 0.98), step(d, 0.0));
   c *= 1.0 - exp(-7.0 * abs(d));
-  c *= 0.78 + 0.22 * cos(140.0 * d);
+  c *= 0.78 + 0.22 * cos(TAU * d / (pw * 9.0));
   return mix(c, vec3f(1.0), clamp(1.6 - abs(d) / pw, 0.0, 1.0));
 }
 
@@ -151,29 +154,39 @@ fn zooView(px: vec2f) -> vec3f {
   let unit = min(cs.x, cs.y);
   let pw = 1.0 / unit;
   let center = (cell + vec2f(0.5, 0.44)) * cs;
-  let ang = u.time * 0.35 * u.spin;
   let id = i32(cell.y * cols + cell.x);
-  let rot = rot2(-(ang + f32(id) * 0.7) * step(0.5, f32(id)));
-  let q = rot * ((px - center) / unit);
-
-  var d = zooShape(id, q) - u.rounding;
-  if (u.onion > 0.0005) { d = abs(d) - u.onion; }
+  let ang = 0.45 * sin(u.time * 0.8 + f32(id) * 1.3) * u.spin;
+  let rot = rot2(-ang);
+  let zs = 0.82;
+  let q = rot * ((px - center) / (unit * zs));
 
   // mouse: which cell is it in?
   let mcell = min(floor(u.mouse.xy / cs), vec2f(cols - 1.0, rows - 1.0));
   let hover = u.mouse.w * step(abs(mcell.x - cell.x) + abs(mcell.y - cell.y), 0.5);
+  let mq = rot * ((u.mouse.xy - center) / (unit * zs));
+
+  // evaluate the SDF at this pixel (and, for the probe, at the mouse) — one call site
+  var dd = array<f32, 2>(0.0, 0.0);
+  var evalN = 1;
+  if (u.fieldView > 0.5 && hover > 0.5) { evalN = 2; }
+  for (var e = 0; e < 2; e++) {
+    if (e >= evalN) { break; }
+    var qq = q;
+    if (e == 1) { qq = mq; }
+    var de = zooShape(id, qq) * zs - u.rounding;
+    if (u.onion > 0.0005) { de = abs(de) - u.onion; }
+    dd[e] = de;
+  }
+  let d = dd[0];
 
   var c: vec3f;
   if (u.fieldView > 0.5) {
     c = fieldColor(d, pw);
     if (hover > 0.5) {
-      let mq = rot * ((u.mouse.xy - center) / unit);
-      var md = zooShape(id, mq) - u.rounding;
-      if (u.onion > 0.0005) { md = abs(md) - u.onion; }
-      let r = abs(md);
-      let ringD = abs(length(q - mq) - r) - pw * 0.8;
-      c = mix(c, vec3f(1.0, 0.86, 0.25), cov(ringD, pw));
-      c = mix(c, vec3f(1.0, 0.86, 0.25), cov(length(q - mq) - 0.012, pw));
+      let r = abs(dd[1]);
+      let dm = length(q - mq) * zs;
+      c = mix(c, vec3f(1.0, 0.86, 0.25), cov(abs(dm - r) - pw * 0.8, pw));
+      c = mix(c, vec3f(1.0, 0.86, 0.25), cov(dm - 0.012, pw));
     }
     let edge = abs(fract(px / cs) - vec2f(0.5));
     c *= 0.55 + 0.45 * smoothstep(0.497, 0.49, max(edge.x, edge.y));
@@ -204,7 +217,7 @@ fn boolView(px: vec2f) -> vec3f {
   if (u.mouse.w > 0.5) {
     let mcell = min(floor(u.mouse.xy / cs), vec2f(cols - 1.0, rows - 1.0));
     let mq = (u.mouse.xy - (mcell + vec2f(0.5, 0.45)) * cs) / unit;
-    bpos = clamp(mq, vec2f(-0.42, -0.3), vec2f(0.42, 0.3));
+    bpos = clamp(mq, vec2f(-0.36, -0.22), vec2f(0.36, 0.22));
   }
   let a = sdRoundBox(q, vec2f(0.27, 0.16), 0.04);
   let b = sdCircle(q - bpos, 0.17);
@@ -328,12 +341,16 @@ fn hud(p: vec2f, pw: f32, W: f32) -> vec3f {
 
   // ---- map pins (world space: they don't scale with the UI)
   let bob = 6.0 * sin(t * 2.2);
-  c = drawPin(c, p, vec2f(W * 0.3, 380.0 + bob), 34.0, vec3f(0.98, 0.72, 0.18), 0, pw);
-  c = drawPin(c, p, vec2f(W * 0.72, 300.0 - bob), 30.0, vec3f(0.3, 0.6, 0.98), 1, pw);
-  c = drawPin(c, p, vec2f(W * 0.2, 700.0 + bob * 0.6), 30.0, vec3f(0.72, 0.42, 0.98), 2, pw);
+  var pinAt = array<vec3f, 4>(vec3f(0.3, 420.0, 34.0), vec3f(0.76, 330.0, 30.0), vec3f(0.2, 720.0, 30.0), vec3f(0.8, 690.0, 28.0));
+  var pinCol = array<vec3f, 4>(vec3f(0.98, 0.72, 0.18), vec3f(0.3, 0.6, 0.98), vec3f(0.72, 0.42, 0.98), vec3f(0.95, 0.35, 0.35));
+  for (var i = 0; i < 4; i++) {
+    let pa = pinAt[i];
+    let sgn = 1.0 - 2.0 * f32(i % 2);
+    c = drawPin(c, p, vec2f(W * pa.x, pa.y + bob * sgn), pa.z, pinCol[i], i, pw);
+  }
 
   // ---- player arrow + radar ping at the center
-  let pc = vec2f(W * 0.5, 560.0);
+  let pc = vec2f(W * 0.42, 650.0);
   let pq = rot2(-0.4 * sin(t * 0.5)) * (p - pc);
   let ping = fract(t * 0.45);
   let pr = abs(length(p - pc) - ping * 150.0) - 1.5;
@@ -343,7 +360,7 @@ fn hud(p: vec2f, pw: f32, W: f32) -> vec3f {
   c = mix(c, vec3f(0.55, 1.0, 0.85), cov(arrow, pw));
 
   // ---- enemy marker with a lock-on reticle (a crosshair)
-  let ec = vec2f(W * 0.66, 600.0);
+  let ec = vec2f(W * 0.553, 528.0);
   let eq = p - ec;
   let rh = sdRhombus(eq, vec2f(22.0, 28.0));
   c = mix(c, vec3f(0.0), cov(rh - 3.0, pw) * 0.8);
@@ -358,7 +375,7 @@ fn hud(p: vec2f, pw: f32, W: f32) -> vec3f {
   c = mix(c, vec3f(1.0, 0.45, 0.42), cov(reticle, pw) * pulse);
 
   // ---- top-left: rank badge + hearts
-  let bc = vec2f(70.0 * S, 72.0 * S);
+  let bc = vec2f(78.0 * S, 120.0 * S);
   let bq = (p - bc) / S;
   let hex = sdHexagon(vec2f(bq.y, bq.x), 44.0);
   c += vec3f(1.0, 0.75, 0.3) * u.glow * 0.4 * exp(-max(hex, 0.0) / (10.0 * S));
@@ -368,7 +385,7 @@ fn hud(p: vec2f, pw: f32, W: f32) -> vec3f {
   let st = sdStar5(bq + vec2f(0.0, 2.0), 26.0, 0.48);
   c = mix(c, mix(vec3f(1.0, 0.86, 0.4), vec3f(1.0, 0.6, 0.2), smoothstep(-20.0, 20.0, bq.y)), cov(st * S, pw));
   for (var i = 0; i < 3; i++) {
-    let hc = vec2f((150.0 + f32(i) * 58.0) * S, 60.0 * S);
+    let hc = vec2f((160.0 + f32(i) * 58.0) * S, 108.0 * S);
     let hq = (p - hc) / (24.0 * S);
     let hd = icoHeart(hq) * 24.0 * S;
     c = mix(c, vec3f(0.02), cov(hd - 3.5 * S, pw) * 0.85);
@@ -380,7 +397,7 @@ fn hud(p: vec2f, pw: f32, W: f32) -> vec3f {
   }
 
   // ---- top-right: compass
-  let cc = vec2f(W - 90.0 * S, 90.0 * S);
+  let cc = vec2f(W - 92.0 * S, 150.0 * S);
   let cq = (p - cc) / S;
   let cr = length(cq);
   c = mix(c, vec3f(0.03, 0.05, 0.08), cov((cr - 64.0) * S, pw) * 0.75);
@@ -440,34 +457,43 @@ fn hud(p: vec2f, pw: f32, W: f32) -> vec3f {
 fn hudView(px: vec2f) -> vec3f {
   let k = 1080.0 / u.resolution.y;
   let W = u.resolution.x * k;
-  let pw = k;
   let lp = px - u.lens.xy;
   let ld = length(lp);
   let R = u.lens.z;
-  if (ld > R + 4.0) { return hud(px * k, pw, W); }
-
   let zoom = max(u.lensZoom, 1.0);
   let src = u.lens.xy + lp / zoom;
-  var c: vec3f;
-  if (u.compare > 0.5 && lp.x > 0.0) {
-    // bitmap: the HUD rendered at native resolution, magnified with bilinear filtering
-    let tp = src - vec2f(0.5);
-    let i0 = floor(tp);
-    let f = tp - i0;
-    let c00 = hud((i0 + vec2f(0.5, 0.5)) * k, pw, W);
-    let c10 = hud((i0 + vec2f(1.5, 0.5)) * k, pw, W);
-    let c01 = hud((i0 + vec2f(0.5, 1.5)) * k, pw, W);
-    let c11 = hud((i0 + vec2f(1.5, 1.5)) * k, pw, W);
-    c = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
-  } else {
-    c = hud(src * k, pw / zoom, W);
+  // Choose where to evaluate the HUD (one call site in a loop keeps the shader small):
+  //   outside the lens: once at this pixel; lens SDF half: once at the magnified point;
+  //   lens bitmap half: 4 texel centers, blended bilinearly (= a magnified screenshot).
+  var pts = array<vec2f, 4>(px, px, px, px);
+  var wts = array<f32, 4>(1.0, 0.0, 0.0, 0.0);
+  var n = 1;
+  var pw = k;
+  let inLens = ld < R - 1.0;
+  if (inLens) {
+    if (u.compare > 0.5 && lp.x > 0.0) {
+      let tp = src - vec2f(0.5);
+      let i0 = floor(tp);
+      let f = tp - i0;
+      pts = array<vec2f, 4>(i0 + vec2f(0.5, 0.5), i0 + vec2f(1.5, 0.5), i0 + vec2f(0.5, 1.5), i0 + vec2f(1.5, 1.5));
+      wts = array<f32, 4>((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+      n = 4;
+    } else {
+      pts[0] = src;
+      pw = k / zoom;
+    }
   }
-  // lens rim, divider and outside shadow
+  var c = vec3f(0.0);
+  for (var i = 0; i < 4; i++) {
+    if (i >= n) { break; }
+    c += wts[i] * hud(pts[i] * k, pw, W);
+  }
+  // lens rim, divider and a soft shadow around it
   let rimD = ld - R;
-  c = mix(c, vec3f(0.95, 0.97, 1.0), cov(abs(rimD + 1.5) - 1.5, 1.0));
+  if (!inLens) { c *= 0.55 + 0.45 * smoothstep(0.0, 6.0, rimD); }
+  c = mix(c, vec3f(0.95, 0.97, 1.0), cov(abs(rimD + 1.0) - 1.6, 1.0));
   if (u.compare > 0.5) { c = mix(c, vec3f(0.95, 0.97, 1.0), cov(abs(lp.x) - 1.0, 1.0) * cov(rimD, 1.0)); }
-  let outside = hud(px * k, pw, W) * (0.55 + 0.45 * smoothstep(0.0, 4.0, rimD));
-  return mix(outside, c, cov(rimD, 1.0));
+  return c;
 }
 
 fn shade(uv: vec2f, px: vec2f) -> vec4f {

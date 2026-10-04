@@ -29,13 +29,17 @@ export function setLabels(ctx, items) {
   );
 }
 
+// The page puts a HUD (fps/API) in the top-left corner and tool buttons in the top-right corner,
+// so labels in the top row start below them (TOP px).
+const TOP = 44;
+
 /** Labels at the top-left corner of the four quadrants (order: TL, TR, BL, BR). */
 export const quadLabels = (texts) =>
-  texts.map((t, i) => ({ text: t, style: `left:calc(${(i % 2) * 50}% + 8px);top:calc(${Math.floor(i / 2) * 50}% + 8px)` }));
+  texts.map((t, i) => ({ text: t, style: `left:calc(${(i % 2) * 50}% + 8px);top:${i < 2 ? `${TOP}px` : 'calc(50% + 8px)'}` }));
 
 /** Labels at the top-left of N equal vertical columns. */
-export const columnLabels = (texts) =>
-  texts.map((t, i) => ({ text: t, style: `left:calc(${(i * 100) / texts.length}% + 8px);top:8px` }));
+export const columnLabels = (texts, top = TOP) =>
+  texts.map((t, i) => ({ text: t, style: `left:calc(${(i * 100) / texts.length}% + 8px);top:${top}px` }));
 
 /**
  * Pan & zoom camera state driven by the pointer (drag = pan, wheel = zoom at cursor,

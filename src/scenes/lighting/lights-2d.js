@@ -174,21 +174,21 @@ export default {
       label: 'Falloff & color',
       kind: 'Abstract',
       note: 'Red, green and blue lights <b>add up</b>: where they overlap you get yellow, cyan, magenta and white. The graph (bottom-right) shows how brightness drops with distance for the selected <b>falloff curve</b>. Toggle normal maps to see the sprites gain relief.',
-      params: { curve: 'smooth', radius: 1, height: 0.12, ambient: 0.06, normals: true, specular: 0.5, view: 'final' },
+      params: { curve: 'smooth', radius: 1, height: 0.12, ambient: 0.1, normals: true, specular: 0.5, view: 'final' },
     },
     {
       id: 'dungeon',
       label: 'Dungeon torches',
       kind: 'In a game',
       note: 'A tile room lit only by flickering torches and the lantern you carry. Every brick and stone has a <b>normal map</b>, so light rakes across the bumps exactly like a real wall. Turn “Normal maps” off to see the flat version.',
-      params: { curve: 'invsq', radius: 1, height: 0.08, ambient: 0.03, normals: true, specular: 0.35, view: 'final' },
+      params: { curve: 'invsq', radius: 1, height: 0.08, ambient: 0.06, normals: true, specular: 0.35, view: 'final' },
     },
     {
       id: 'neon',
       label: 'Neon night street',
       kind: 'In a game',
       note: 'Hundreds of lights: neon signs, car head- and tail-lights, lantern strings and a sky-lantern festival. All lights live in a GPU <b>storage buffer</b>; a compute shader sorts them into 16×16-pixel tiles so each pixel only evaluates the few lights that reach it (<b>tiled lighting</b>). Try View → “Lights per tile”.',
-      params: { curve: 'smooth', radius: 1, height: 0.1, ambient: 0.05, normals: true, specular: 0.6, count: 320, tiled: true, view: 'final' },
+      params: { curve: 'smooth', radius: 1, height: 0.1, ambient: 0.07, normals: true, specular: 0.6, count: 160, tiled: true, view: 'final' },
     },
   ],
   controls: [
@@ -212,7 +212,7 @@ export default {
     { type: 'toggle', key: 'normals', label: 'Normal maps', value: true, help: 'Per-pixel surface direction from the normal-map atlas. Off = everything is a flat plane.' },
     { type: 'slider', key: 'specular', label: 'Specular (shine)', min: 0, max: 2, step: 0.01, value: 0.5, help: 'Blinn-Phong highlight: wet stone, metal, polished floors.' },
     { type: 'heading', label: 'Many lights', showFor: ['neon'] },
-    { type: 'slider', key: 'count', label: 'Light count', min: 16, max: MAX_LIGHTS, step: 1, value: 320, log: true, showFor: ['neon'], format: (v) => Math.round(v).toLocaleString(), help: 'Signs, cars, lantern strings, then floating sky lanterns.' },
+    { type: 'slider', key: 'count', label: 'Light count', min: 16, max: MAX_LIGHTS, step: 1, value: 160, log: true, showFor: ['neon'], format: (v) => Math.round(v).toLocaleString(), help: 'Signs, cars, lantern strings, then floating sky lanterns.' },
     { type: 'toggle', key: 'tiled', label: 'Tiled light culling (compute)', value: true, showFor: ['neon'], help: 'Off = every pixel loops over every light (brute force). Watch the fps at 1,024 lights.' },
     {
       type: 'select',
@@ -421,37 +421,37 @@ fn cull(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u
     const tileScale = (rowsWanted) => Math.max(1, Math.round(H / (16 * rowsWanted)));
 
     function sceneFalloff(t, p) {
-      const S = tileScale(9);
+      const S = tileScale(10);
       const T = 16 * S;
       const cols = Math.ceil(W / T) + 1;
       const rows = Math.ceil(H / T) + 1;
       const ox = (W - cols * T) / 2;
       const oy = (H - rows * T) / 2;
-      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) spr('tile_metal', ox + c * T, oy + r * T, T, T);
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) spr('tile_sand', ox + c * T, oy + r * T, T, T, { color: '#c4c8d8' });
       // a shelf of props, big, to show normal-mapped relief
-      const props = ['shield', 'gem', 'chest', 'sword', 'potion', 'heart', 'crate', 'star', 'bomb', 'mushroom', 'key'];
-      const ps = Math.max(2, Math.round(S * 2.2)) * 16;
-      const gap = ps * 1.15;
-      const n = Math.min(props.length, Math.floor((W * 0.86) / gap));
+      const props = ['shield', 'gem', 'chest', 'sword', 'potion', 'crate', 'heart', 'star', 'bomb', 'key'];
+      const ps = Math.max(2, Math.round(H / 110)) * 16;
+      const gap = ps * 1.2;
+      const n = Math.min(props.length, Math.floor((W * 0.62) / gap));
       for (let i = 0; i < n; i++) {
-        const x = W / 2 + (i - (n - 1) / 2) * gap;
-        spr(props[i], x, H * 0.5, ps, ps, { anchor: [0.5, 0.5], rot: Math.sin(t * 0.3 + i) * 0.0 });
+        const x = W * 0.42 + (i - (n - 1) / 2) * gap;
+        spr(props[i], x, H * 0.47, ps, ps, { anchor: [0.5, 0.5] });
       }
-      // RGB Venn: three lights circling
-      const R = Math.min(W, H) * 0.42 * p.radius;
+      // RGB "Venn diagram" of light: three lights slowly circling
+      const R = H * 0.4 * p.radius;
       const hgt = p.height * H;
       ['red', 'green', 'blue'].forEach((k, i) => {
-        const a = t * 0.25 + (i * Math.PI * 2) / 3 - Math.PI / 2;
-        const x = W / 2 + Math.cos(a) * H * 0.17;
-        const y = H / 2 + Math.sin(a) * H * 0.17;
-        addLight(x, y, R, hgt, COLORS[k], 1.6, { size: H * 0.012 });
+        const a = t * 0.2 + (i * Math.PI * 2) / 3 - Math.PI / 2;
+        const x = W * 0.42 + Math.cos(a) * H * 0.2;
+        const y = H * 0.47 + Math.sin(a) * H * 0.2;
+        addLight(x, y, R, hgt, COLORS[k], 1.5, { size: H * 0.011 });
       });
-      if (ctx.pointer.over) addLight(mouse.x, mouse.y, R * 0.8, hgt, '#ffffff', 1.3, { size: H * 0.01 });
-      for (const d of dropped) addLight(d.x, d.y, R * 0.8, hgt, d.hex, 1.5, { size: H * 0.01 });
+      if (ctx.pointer.over) addLight(mouse.x, mouse.y, R * 0.7, hgt, '#fff4e0', 0.9, { size: H * 0.009 });
+      for (const d of dropped) addLight(d.x, d.y, R * 0.8, hgt, d.hex, 1.4, { size: H * 0.009 });
     }
 
     function sceneDungeon(t, p) {
-      const S = tileScale(10);
+      const S = tileScale(9);
       const T = 16 * S;
       const cols = Math.ceil(W / T);
       const rows = Math.ceil(H / T);
@@ -467,9 +467,15 @@ fn cull(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u
       for (let r = 0; r < rows; r++)
         for (let c = 0; c < cols; c++) {
           let name = 'tile_stone';
-          if (isWall(c, r)) name = 'tile_brick';
-          else if (Math.abs(c - cx) <= 2 && Math.abs(r - cy) <= 1) name = 'tile_wood';
-          spr(name, ox + c * T, oy + r * T, T, T);
+          let color = '#c9c0b6';
+          if (isWall(c, r)) {
+            name = 'tile_brick';
+            color = r === 0 ? '#6a5a58' : '#8a7672';
+          } else if (Math.abs(c - cx) <= 2 && Math.abs(r - cy) <= 1) {
+            name = 'tile_wood';
+            color = '#d0b8a0';
+          }
+          spr(name, ox + c * T, oy + r * T, T, T, { color });
         }
       const at = (c, r) => [ox + c * T, oy + r * T];
       // torches on the back wall and on the pillars
@@ -477,14 +483,14 @@ fn cull(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u
       const torchSpots = [];
       for (let c = 2; c < cols - 1; c += 4) torchSpots.push([c, 1]);
       for (const [pc, pr] of pil) torchSpots.push([pc, pr]);
-      const R = H * 0.42 * p.radius;
+      const R = H * 0.4 * p.radius;
       const hgt = p.height * H;
       torchSpots.forEach(([c, r], k) => {
         const [x, y] = at(c, r);
         spr(torchFrame(k), x, y, T, T, { emis: 2 });
-        const fl = 0.75 + 0.35 * noise1(t * 9 + k * 13, 3) + 0.1 * Math.sin(t * 23 + k);
-        const jx = (noise1(t * 5 + k * 7, 9) - 0.5) * T * 0.06;
-        addLight(x + T / 2 + jx, y + T * 0.32, R * (0.92 + 0.08 * fl), hgt, COLORS.torch, 1.5 * fl, { size: T * 0.09 });
+        const fl = 0.8 + 0.3 * noise1(t * 9 + k * 13, 3) + 0.08 * Math.sin(t * 23 + k);
+        const jx = (noise1(t * 5 + k * 7, 9) - 0.5) * T * 0.08;
+        addLight(x + T / 2 + jx, y + T * 0.7, R * (0.94 + 0.06 * fl), hgt, COLORS.torch, 2.2 * fl, { size: T * 0.08, at: [x + T / 2 + jx, y + T * 0.32] });
       });
       // props
       const put = (name, c, r, o) => {
@@ -499,14 +505,14 @@ fn cull(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u
       put('key', cols - 2, rows - 2);
       put('mushroom', 3, 2);
       put('bomb', cols - 4, 2);
-      put('sword', cx - 3, cy + 2, { rot: 0.0 });
+      put('sword', cx - 3, cy + 2);
       put('shield', cx + 3, cy + 2);
       put('gem', cx + 1, 2);
       for (let i = 0; i < 3; i++) put(`coin_${Math.floor(t * 10 + i * 2) % 8}`, cx - 1 + i, cy - 2);
       // hero, slime and bat
       const heroX = ox + (cx - 0.5) * T;
       const heroY = oy + cy * T;
-      spr(`hero_idle_${Math.floor(t * 2) % 2}`, heroX, heroY, T, T, { flip: mouse.x < heroX + T / 2 });
+      spr(`hero_idle_${Math.floor(t * 2) % 2}`, heroX, heroY, T, T, { flip: mouse.x < heroX + T / 2 && ctx.pointer.over });
       const sx = ox + (cols * 0.5 + Math.sin(t * 0.6) * cols * 0.3) * T;
       spr(`slime_${Math.floor(t * 4) % 3}`, sx, oy + (rows - 3) * T, T, T, { flip: Math.cos(t * 0.6) < 0 });
       const bx = W * 0.5 + Math.sin(t * 0.45) * W * 0.32;
@@ -514,39 +520,42 @@ fn cull(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u
       spr(`bat_${Math.floor(t * 8) % 2}`, bx, by, T, T, { flip: Math.cos(t * 0.45) < 0 });
       // magic gem glow
       const [gx, gy] = at(cx + 1, 2);
-      addLight(gx + T / 2, gy + T / 2, R * 0.35, hgt, '#40d0ff', 0.6 + 0.3 * Math.sin(t * 2.2), null);
+      addLight(gx + T / 2, gy + T / 2, R * 0.4, hgt, '#40d0ff', 1.2 + 0.5 * Math.sin(t * 2.2), null);
       // the lantern: mouse, or carried by the hero
       const lx = ctx.pointer.over ? mouse.x : heroX + T * 0.9;
       const ly = ctx.pointer.over ? mouse.y : heroY + T * 0.4;
-      addLight(lx, ly, R * 1.1, hgt * 1.3, COLORS.lantern, 1.3, { size: T * 0.07 });
+      addLight(lx, ly, R * 1.2, hgt * 1.3, COLORS.lantern, 1.4, { size: T * 0.06 });
     }
 
     // neon street: a fixed pool of potential lights, first `count` are used
     let neonCache = null;
-    function neonLayout(T, cols, rows) {
+    function neonLayout(T, rows) {
       const key = `${W}x${H}`;
       if (neonCache && neonCache.key === key) return neonCache;
       const R = rng(7);
-      const top = 3 * T; // first road-side row (sidewalk) y
-      const bot = (rows - 3) * T;
+      const top = 3 * T; // road starts below the top sidewalk
+      const bot = (rows - 3) * T; // bottom sidewalk row
       const signs = [];
-      for (let x = T * 1.5; x < W - T * 2; x += T * (4 + Math.floor(R() * 3))) {
-        signs.push({ x, y: top - T * 0.3, w: T * (2 + R() * 1.5), hex: NEON[Math.floor(R() * NEON.length)], up: true });
+      for (let x = T * 1.2; x < W - T * 2; x += T * (5 + Math.floor(R() * 3))) {
+        signs.push({ x, y: 2 * T + T * 0.12, w: T * (2 + R() * 1.5), hex: NEON[Math.floor(R() * NEON.length)], up: true });
       }
-      for (let x = T * 3; x < W - T * 2; x += T * (4 + Math.floor(R() * 3))) {
-        signs.push({ x, y: bot + T * 1.3, w: T * (2 + R() * 1.5), hex: NEON[Math.floor(R() * NEON.length)], up: false });
+      for (let x = T * 3.5; x < W - T * 2; x += T * (5 + Math.floor(R() * 3))) {
+        signs.push({ x, y: bot + T * 0.88, w: T * (2 + R() * 1.5), hex: NEON[Math.floor(R() * NEON.length)], up: false });
       }
       const strings = [];
-      for (let x = T * 2; x < W; x += T * 5.5) {
+      let si = 0;
+      for (let x = T * 3; x < W - T; x += T * 8, si++) {
         const pts = [];
-        const n = 9;
+        const n = 7;
         const x0 = x;
-        const x1 = x + T * 2.5;
+        const x1 = x + T * 3;
+        const y0 = top + T * 0.1;
+        const y1 = bot - T * 0.1;
         for (let i = 0; i < n; i++) {
           const k = (i + 0.5) / n;
-          pts.push({ x: x0 + (x1 - x0) * k, y: top + T + (bot - top - T) * k, hex: NEON[(i + strings.length) % NEON.length] });
+          pts.push({ x: x0 + (x1 - x0) * k, y: y0 + (y1 - y0) * k, hex: NEON[(i + si * 2) % NEON.length] });
         }
-        strings.push({ x0, y0: top + T * 0.5, x1, y1: bot + T * 0.5, pts });
+        strings.push({ x0, y0, x1, y1, pts });
       }
       const floaters = [];
       for (let i = 0; i < MAX_LIGHTS; i++) {
@@ -557,59 +566,60 @@ fn cull(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u
     }
 
     function sceneNeon(t, p) {
-      const S = tileScale(13);
+      const S = tileScale(15);
       const T = 16 * S;
       const cols = Math.ceil(W / T);
       const rows = Math.ceil(H / T);
-      const L = neonLayout(T, cols, rows);
+      const L = neonLayout(T, rows);
       const roofs = ['tile_wood', 'tile_metal', 'tile_brick', 'tile_stone'];
+      const roofTint = ['#5e5262', '#4e5668', '#5e4c54', '#50525e'];
       for (let r = 0; r < rows; r++)
         for (let c = 0; c < cols; c++) {
-          let name = 'tile_stone';
-          let color = '#7c86a8';
           if (r < 2 || r >= rows - 2) {
-            name = roofs[Math.floor((c + (r < 2 ? 0 : 3)) / 5) % roofs.length];
-            color = '#8a8098';
+            const b = Math.floor((c + (r < 2 ? 0 : 3)) / 5) % roofs.length;
+            spr(roofs[b], c * T, r * T, T, T, { color: roofTint[b] });
           } else if (r === 2 || r === rows - 3) {
-            name = 'tile_metal';
-            color = '#9aa2b4';
+            spr('tile_stone', c * T, r * T, T, T, { color: '#8088a0' });
+          } else {
+            // asphalt: finer grain (half-size tiles)
+            const h = S >= 2 ? T / 2 : T;
+            for (let yy = 0; yy < T; yy += h) for (let xx = 0; xx < T; xx += h) spr('tile_sand', c * T + xx, r * T + yy, h, h, { color: '#3e4456' });
           }
-          spr(name, c * T, r * T, T, T, { color });
         }
       // lane dashes
-      const midY = (L.top + T + L.bot) / 2;
-      for (let x = (-(t * 0) % (T * 2)); x < W; x += T * 2) spr('tile_ice', x, midY - T * 0.05, T, T * 0.1, { color: '#e8d27a' });
-      const R = H * 0.3 * p.radius;
+      const midY = (L.top + L.bot) / 2;
+      for (let x = T * 0.5; x < W; x += T * 2) spr('tile_ice', x, midY - T * 0.04, T, T * 0.08, { color: '#c8b46a' });
       const hgt = p.height * H;
+      const rk = p.radius;
       // 1. neon signs (3 lights each)
       for (const s of L.signs) {
-        const flick = noise1(t * 3 + s.x, 5) > 0.08 ? 1 : 0.25;
-        spr('tile_ice', s.x, s.y - T * 0.08, s.w, T * 0.16, { color: s.hex, emis: flick });
-        for (let k = 0; k < 3; k++) addLight(s.x + s.w * (k + 0.5) / 3, s.y + (s.up ? T * 0.35 : -T * 0.35), R * 0.7, hgt * 0.6, s.hex, 1.2 * flick, null);
+        const flick = noise1(t * 3 + s.x, 5) > 0.1 ? 1 : 0.2;
+        spr('tile_ice', s.x, s.y - T * 0.07, s.w, T * 0.14, { color: s.hex, emis: flick });
+        for (let k = 0; k < 3; k++) addLight(s.x + (s.w * (k + 0.5)) / 3, s.y + (s.up ? T * 0.3 : -T * 0.3), T * 2.6 * rk, hgt * 0.5, s.hex, 1.1 * flick, null);
       }
-      // 2. cars: body in albedo pass, head- and tail-lights
+      // 2. cars: body in the albedo pass, head- and tail-lights
       shapes.begin();
-      const lanes = [L.top + T * 1.6, L.bot - T * 0.6];
+      const lanes = [L.top + (midY - L.top) * 0.5, midY + (L.bot - midY) * 0.5];
       for (let i = 0; i < 4; i++) {
         const dir = i % 2 ? -1 : 1;
         const lane = lanes[i % 2];
-        const span = W + T * 6;
-        const x = ((((t * T * (2.2 + i * 0.35) + i * span * 0.27) % span) + span) % span) - T * 3;
+        const span = W + T * 8;
+        const x = ((((t * T * (1.6 + i * 0.3) + i * span * 0.27) % span) + span) % span) - T * 4;
         const cxp = dir > 0 ? x : W - x;
-        const body = ['#c23b4e', '#2f6fd6', '#e0b13a', '#e8e8f0'][i];
+        const body = ['#c23b4e', '#2f6fd6', '#e0b13a', '#d8d8e0'][i];
         shapes.box(cxp, lane, T * 0.9, T * 0.42, body, { radius: T * 0.18 });
         shapes.box(cxp + dir * T * 0.25, lane, T * 0.22, T * 0.34, '#1b2133', { radius: T * 0.06 });
         shapes.box(cxp - dir * T * 0.55, lane, T * 0.14, T * 0.32, '#1b2133', { radius: T * 0.05 });
         for (const side of [-1, 1]) {
-          addLight(cxp + dir * T * 1.6, lane + side * T * 0.28, R * 0.55, hgt * 0.4, '#fff1cc', 1.6, { size: T * 0.07, at: [cxp + dir * T * 0.88, lane + side * T * 0.28] });
-          addLight(cxp - dir * T * 1.0, lane + side * T * 0.3, R * 0.25, hgt * 0.3, '#ff2030', 1.2, { size: T * 0.06, at: [cxp - dir * T * 0.9, lane + side * T * 0.3] });
+          addLight(cxp + dir * T * 1.7, lane + side * T * 0.3, T * 2.0 * rk, hgt * 0.3, '#fff1cc', 1.5, { size: T * 0.06, at: [cxp + dir * T * 0.88, lane + side * T * 0.28] });
+          addLight(cxp - dir * T * 1.05, lane + side * T * 0.3, T * 0.9 * rk, hgt * 0.3, '#ff2030', 1.1, { size: T * 0.05, at: [cxp - dir * T * 0.9, lane + side * T * 0.3] });
         }
       }
       // 3. lantern strings across the street
       for (const s of L.strings) {
         for (const q of s.pts) {
           const sway = Math.sin(t * 1.3 + q.x * 0.01) * T * 0.05;
-          addLight(q.x + sway, q.y, R * 0.45, hgt * 1.4, q.hex, 0.9, { size: T * 0.11, string: s });
+          addLight(q.x + sway, q.y, T * 1.6 * rk, hgt * 1.2, q.hex, 0.9, { size: T * 0.09 });
         }
       }
       // 4. floating sky lanterns fill the rest of the budget
@@ -617,9 +627,10 @@ fn cull(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u
       const want = Math.round(p.count);
       for (let i = 0; fixed + i < want && i < L.floaters.length; i++) {
         const f = L.floaters[i];
-        const y = ((((f.y - t * T * f.sp * 0.6) % (H + T * 2)) + H + T * 2) % (H + T * 2)) - T;
+        const span = H + T * 2;
+        const y = ((((f.y - t * T * f.sp * 0.5) % span) + span) % span) - T;
         const x = f.x + Math.sin(t * 0.5 + f.ph) * T * 0.6;
-        addLight(x, y, R * 0.4, hgt * 2, f.hex, 0.75 + 0.25 * Math.sin(t * 3 + f.ph), { size: T * 0.08 });
+        addLight(x, y, T * 1.4 * rk, hgt * 1.6, f.hex, 0.45 + 0.15 * Math.sin(t * 3 + f.ph), { size: T * 0.055 });
       }
       lights.length = Math.min(lights.length, want);
       return L;
@@ -692,7 +703,7 @@ fn cull(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u
           shininess: 28,
           view: viewIdx,
           tiled: tiled ? 1 : 0,
-          exposure: ctx.example === 'neon' ? 1.25 : 1.1,
+          exposure: ctx.example === 'neon' ? 1.0 : 1.15,
           time: t,
         });
         U.upload();

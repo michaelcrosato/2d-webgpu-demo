@@ -250,17 +250,21 @@ fn wood(lp: vec2f, sc: f32, off: vec2f, oct: i32) -> vec3f {
 }
 
 fn marble(lp: vec2f, sc: f32, off: vec2f, oct: i32) -> vec3f {
-  let p = lp * sc * 0.9 + off;
+  let p = lp * sc * 0.8 + off;
   let tb = turb(p, oct);
-  let v = sin((p.x * 0.8 + p.y * 0.6) * 2.2 + tb * u.warp * 7.0);
-  let vein = 1.0 - smoothstep(0.0, 0.16, abs(v));
-  let thin = 1.0 - smoothstep(0.0, 0.05, abs(sin(p.y * 1.3 - p.x * 0.4 + turb(p * 1.7 + 9.0, oct) * u.warp * 9.0)));
-  let cloud = fbm(p * 0.7 + 3.0, oct) * 0.5 + 0.5;
-  var c = mix(vec3f(0.93, 0.92, 0.9), vec3f(0.82, 0.83, 0.86), cloud);
-  c = mix(c, vec3f(0.42, 0.44, 0.5), vein * 0.75);
-  c = mix(c, vec3f(0.55, 0.5, 0.42), thin * 0.45);
+  // soft grey bands that follow the same turbulent flow as the veins
+  let phase = (p.x * 0.9 + p.y * 0.5) * 3.0 + tb * u.warp * 5.0;
+  let band = 0.5 + 0.5 * sin(phase);
+  let cloud = fbm(p * 1.3 + 3.0, oct) * 0.5 + 0.5;
+  var c = mix(vec3f(0.95, 0.94, 0.92), vec3f(0.8, 0.81, 0.84), smoothstep(0.35, 1.0, band) * 0.8 + cloud * 0.25);
+  // main dark veins with a soft halo, plus thin golden secondary veins
+  let v = abs(sin(phase * 0.5 + 0.4));
+  c = mix(c, vec3f(0.62, 0.63, 0.68), (1.0 - smoothstep(0.0, 0.22, v)) * 0.45);
+  c = mix(c, vec3f(0.3, 0.31, 0.37), 1.0 - smoothstep(0.0, 0.045, v));
+  let v2 = abs(sin((p.y * 1.7 - p.x * 0.6) * 1.3 + turb(p * 0.8 + 9.0, oct) * u.warp * 3.0));
+  c = mix(c, vec3f(0.66, 0.58, 0.42), (1.0 - smoothstep(0.0, 0.035, v2)) * 0.5);
   // polished highlight
-  c += vec3f(0.07) * smoothstep(0.3, 0.0, abs(lp.x - lp.y * 0.6 - 0.35));
+  c += vec3f(0.06) * smoothstep(0.35, 0.0, abs(lp.x - lp.y * 0.6 - 0.35));
   return c;
 }
 
@@ -270,9 +274,9 @@ fn clouds(lp: vec2f, sc: f32, off: vec2f, oct: i32, t: f32) -> vec3f {
   let warp = vec2f(fbm(p * 0.5 + t * 0.02, 3), fbm(p * 0.5 + 7.3, 3)) * 0.35 * u.warp;
   let n = fbm(p + warp, oct) * 0.5 + 0.5;
   let n2 = fbm(p + warp + vec2f(-0.06, -0.08), oct) * 0.5 + 0.5;
-  let dens = smoothstep(0.47, 0.75, n);
-  let lit = clamp(0.62 + (n2 - n) * 7.0, 0.35, 1.05);
-  let sky = mix(vec3f(0.22, 0.45, 0.82), vec3f(0.62, 0.8, 0.96), lp.y);
+  let dens = smoothstep(0.42, 0.64, n);
+  let lit = clamp(0.72 + (n2 - n) * 6.0 - (0.6 - n) * 0.8, 0.3, 1.0);
+  let sky = mix(vec3f(0.16, 0.38, 0.78), vec3f(0.55, 0.76, 0.95), lp.y);
   let cl = mix(vec3f(0.55, 0.6, 0.72), vec3f(1.0, 0.99, 0.96), lit);
   return mix(sky, cl, dens);
 }
@@ -288,19 +292,19 @@ fn caust(p: vec2f, t: f32) -> f32 {
 
 fn caustics(lp: vec2f, sc: f32, off: vec2f, t: f32) -> vec3f {
   // pool floor tiles
-  let tp = lp * 9.0;
+  let tp = lp * 6.0;
   let tf = abs(fract(tp) - 0.5);
   let grout = smoothstep(0.43, 0.47, max(tf.x, tf.y));
   let th = hash21(floor(tp));
   var floorc = mix(vec3f(0.42, 0.72, 0.8), vec3f(0.36, 0.64, 0.74), th);
   floorc = mix(floorc, vec3f(0.25, 0.45, 0.52), grout);
-  let p = lp * sc * 0.55 + off;
-  let e = 0.012;
+  let p = lp * sc * 1.5 + off;
+  let e = 0.025;
   let cr = caust(p + vec2f(e, 0.0), t);
   let cg = caust(p, t);
   let cb = caust(p - vec2f(e, 0.0), t);
-  var c = floorc * vec3f(0.55, 0.75, 0.8) + vec3f(cr, cg, cb) * vec3f(0.9, 1.0, 1.0) * 0.75;
-  c = mix(c, vec3f(0.05, 0.25, 0.35), 0.18);
+  var c = floorc * vec3f(0.5, 0.72, 0.8) + vec3f(cr, cg, cb) * vec3f(0.85, 1.0, 1.0) * 0.8;
+  c = mix(c, vec3f(0.03, 0.22, 0.32), 0.2 + 0.15 * lp.y);
   return c;
 }
 
@@ -344,14 +348,18 @@ fn dungeon(sp: vec2f, side: f32, t: f32) -> vec3f {
   wall *= 0.85 + 0.25 * valueNoise(sp * 60.0);
   wall *= 0.35 + 0.65 * smoothstep(0.02, 0.09, mortar);
   // floor
-  let fl = smoothstep(0.3, 0.31, sp.y);
-  wall = mix(wall, vec3f(0.22, 0.2, 0.22) * (0.8 + 0.2 * valueNoise(sp * vec2f(8.0, 30.0))), fl);
+  let fl = smoothstep(0.3, 0.305, sp.y);
+  let fp = vec2f(sp.x * 1.2 / max(sp.y - 0.18, 0.05), 1.5 / max(sp.y - 0.18, 0.05));
+  let slab = max(abs(fract(fp.x + 0.5 * fmod(floor(fp.y), 2.0)) - 0.5), abs(fract(fp.y) - 0.5));
+  var floorc = mix(vec3f(0.3, 0.27, 0.27), vec3f(0.4, 0.34, 0.31), hash21(floor(fp)));
+  floorc *= 1.0 - 0.65 * smoothstep(0.4, 0.47, slab);
+  wall = mix(wall, floorc * (0.8 + 0.25 * valueNoise(sp * vec2f(10.0, 40.0))), fl);
   // torch light with flicker
   let flick = 0.8 + 0.2 * sig(side, t, 3.0);
   let tp = vec2f(0.0, -0.08);
   let d = length(sp - tp);
-  let light = flick * 1.25 / (1.0 + 18.0 * d * d / (flick * flick));
-  var c = wall * (vec3f(0.06, 0.07, 0.12) + vec3f(1.0, 0.62, 0.3) * light);
+  let light = flick * 1.7 / (1.0 + 12.0 * d * d / (flick * flick));
+  var c = wall * (vec3f(0.07, 0.08, 0.13) + vec3f(1.0, 0.62, 0.3) * light);
   // torch: handle + flame
   let hd = sdBox(sp - vec2f(0.0, 0.0), vec2f(0.012, 0.07));
   c = mix(c, vec3f(0.25, 0.15, 0.08), 1.0 - smoothstep(0.0, 0.004, hd));
@@ -363,12 +371,12 @@ fn dungeon(sp: vec2f, side: f32, t: f32) -> vec3f {
   // fireflies
   for (var i = 0; i < 7; i++) {
     let fi = f32(i);
-    let base = vec2f((fi - 3.0) * 0.17, -0.22 + 0.1 * sin(fi * 2.3));
+    let base = vec2f((fi - 3.0) * 0.17, -0.18 + 0.2 * sin(fi * 2.3));
     let o = vec2f(sig(side, t * 0.6, 10.0 + fi), sig(side, t * 0.6, 30.0 + fi)) * vec2f(0.1, 0.08);
     let fp = base + o;
     let fd2 = length(sp - fp);
     let blink = 0.65 + 0.35 * sig(side, t, 50.0 + fi);
-    c += vec3f(0.75, 1.0, 0.35) * (exp(-fd2 * 160.0) * 1.4 + exp(-fd2 * 30.0) * 0.25) * blink;
+    c += vec3f(0.75, 1.0, 0.35) * (exp(-fd2 * 140.0) * 1.5 + exp(-fd2 * 28.0) * 0.3) * blink;
   }
   return c;
 }
@@ -433,7 +441,7 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
 `;
 
 export default shaderScene({
-  interaction: 'Move the mouse over a noise panel: the dashed line picks the row that is plotted as a 1D graph below it.',
+  interaction: 'Hover a panel: the dashed row is plotted below it.',
   examples: [
     {
       id: 'compare',
@@ -447,6 +455,7 @@ export default shaderScene({
       kind: 'Real life',
       note: 'Natural materials are mostly “noise + a shaping function”. Wood = rings (distance to the log axis) wobbled by noise. Marble = <code>sin(x + turbulence)</code>. Clouds = fBm through a soft threshold. Pool caustics = two layers of moving Worley cell edges.',
       params: { freq: 4, warp: 1, detail: 5, speed: 1 },
+      hint: '',
     },
     {
       id: 'motion',
@@ -454,6 +463,7 @@ export default shaderScene({
       kind: 'In a game',
       note: 'Noise isn’t only for pictures — sample it along <b>time</b> to drive motion. Left: a fresh random number every tick (camera shake, torch flicker and fireflies all jitter and teleport). Right: the same effects driven by smooth noise — organic and pleasant. The graphs show the torch brightness over the last 3 seconds.',
       params: { speed: 1 },
+      hint: '',
     },
   ],
   controls: [
@@ -472,14 +482,14 @@ export default shaderScene({
   include: ['noise', 'sdf'],
   bind(params, ctx) {
     if (ctx.example === 'compare') {
-      setLabels(ctx, quadLabels(['<b>Value noise</b> · random values, blended', '<b>Perlin noise</b> · random gradients', '<b>Simplex noise</b> · triangle grid', '<b>Worley noise</b> · distance to points']));
+      setLabels(ctx, quadLabels(['<b>Value</b> · random values', '<b>Perlin</b> · random gradients', '<b>Simplex</b> · triangle grid', '<b>Worley</b> · distance to points']));
     } else if (ctx.example === 'textures') {
-      setLabels(ctx, quadLabels(['<b>Wood</b> · rings + noise wobble', '<b>Marble</b> · sin(x + turbulence)', '<b>Clouds</b> · fBm + soft threshold', '<b>Caustics</b> · Worley cell edges']));
+      setLabels(ctx, quadLabels(['<b>Wood</b> · rings + wobble', '<b>Marble</b> · sin(x + turbulence)', '<b>Clouds</b> · fBm + threshold', '<b>Caustics</b> · Worley edges']));
     } else {
       setLabels(ctx, [
-        { text: '<b>random()</b> every tick — jittery', style: 'left:8px;top:8px' },
-        { text: '<b>noise(time)</b> — smooth & organic', style: 'left:calc(50% + 8px);top:8px' },
-        { text: 'torch brightness, last 3 s', style: 'left:calc(50% - 175px);top:calc(70% + 4px);opacity:.75' },
+        { text: '<b>random()</b> every tick — jittery', style: 'left:8px;top:44px' },
+        { text: '<b>noise(time)</b> — smooth', style: 'left:calc(50% + 8px);top:44px' },
+        { text: 'torch brightness over the last 3 s ↓', style: 'right:8px;top:calc(70% - 30px);opacity:.85' },
       ]);
     }
     return {};

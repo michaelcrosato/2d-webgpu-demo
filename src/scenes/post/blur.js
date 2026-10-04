@@ -1,6 +1,6 @@
 import { shaderScene } from '../../core/shaderscene.js';
 import { makeCanvas } from '../../core/assets.js';
-import { overlays, compareSplit, SPLIT_WGSL, GAME_POS_WGSL, clamp01 } from './_shared.js';
+import { overlays, compareSplit, SPLIT_WGSL, GAME_POS_WGSL, clamp01, gamePass, withGameIncludes } from './_shared.js';
 
 // Blur: box vs separable Gaussian, dual-filter (Kawase) pyramid, radial / zoom / spin blur,
 // a pause menu over a blurred game and a tilt-shift "miniature" effect.
@@ -292,7 +292,7 @@ function fetchInfo(p) {
     return `${m === 'box' ? 'Box' : 'Gaussian'} · 2 passes × ${taps} fetches at ${res}<br>brute-force 2D kernel: ${brute.toLocaleString()} fetches/pixel`;
   }
   if (cur.ex === 'types' && m === 'radial') return `Radial: ${Math.round(p.samples)} fetches along the line to the centre`;
-  if (cur.ex === 'tiltshift') return 'Separable Gaussian at ½ res · σ grows with distance from the focus band';
+  if (cur.ex === 'tiltshift') return '½-res separable Gaussian · σ grows away from the band';
   if (cur.ex === 'zoom') return `${Math.round(p.samples)} fetches per pixel along the blur path`;
   const L = kawL(p);
   let total = 8;
@@ -318,7 +318,7 @@ export default shaderScene({
       kind: 'In a game',
       note: 'The classic “frosted glass” pause screen: the game keeps rendering underneath, gets a cheap Kawase blur and a dim, and a crisp UI panel sits on top. Click <b>Resume</b> to close it, click anywhere to pause again.',
       params: { levels: 4, offset: 1.5, dim: 0.45 },
-      hint: 'Click “Resume” to close the menu, click anywhere to open it again.',
+      hint: 'Click Resume to close · click anywhere to reopen.',
     },
     {
       id: 'tiltshift',
@@ -417,10 +417,10 @@ export default shaderScene({
     hoverItem: 'f32',
     dashAmt: 'f32',
   },
-  include: ['math', 'hash', 'color'],
-  input: 'game',
+  include: withGameIncludes(['math', 'hash', 'color']),
   textures: { menuTex: { source: async () => menuCanvas() } },
   passes: [
+    gamePass(),
     { name: 'd1', scale: 0.5, iterations: downIt(1), code: DOWN('game', 'd1') },
     { name: 'd2', scale: 0.25, iterations: downIt(2), code: DOWN('d1', 'd2') },
     { name: 'd3', scale: 0.125, iterations: downIt(3), code: DOWN('d2', 'd3') },
@@ -454,10 +454,15 @@ export default shaderScene({
     if (ctx.example === 'pause') {
       const hov = hoveredItem(ctx);
       out.hoverItem = st.openTarget > 0.5 ? hov : -1;
+      // button semantics: press AND release on "Resume" closes; any click while closed re-opens
       if (ctx.pointer.clicked) {
-        if (st.openTarget < 0.5) st.openTarget = 1;
-        else if (hov === 0) st.openTarget = 0;
+        st.pressItem = hov;
+        if (st.openTarget < 0.5) {
+          st.openTarget = 1;
+          st.pressItem = -2;
+        }
       }
+      if (ctx.pointer.released && st.pressItem === 0 && hov === 0 && st.openTarget > 0.5) st.openTarget = 0;
       st.open += (st.openTarget - st.open) * clamp01((ctx.paused ? 1 : dt) * 7);
       if (Math.abs(st.open - st.openTarget) < 0.002) st.open = st.openTarget;
     }
@@ -476,8 +481,9 @@ export default shaderScene({
       if (p.auto && t - st.dashT > 2.0) st.dashT = t;
       const age = t - st.dashT;
       out.dashAmt = age < 0 ? 0 : Math.min(1, age / 0.06) * Math.exp(-Math.max(0, age - 0.06) * 2.6);
+      if (ctx.testMode) out.dashAmt = 0.9; // the headless test renders ~2 fps: hold the dash so the screenshot shows it
     }
-    ov.show('cost', fetchInfo(p), 'right:8px;bottom:8px;text-align:right');
+    ov.show('cost', fetchInfo(p), ctx.example === 'pause' ? 'right:8px;bottom:8px;text-align:right' : 'right:8px;top:46px;text-align:right');
     ov.end();
     return out;
   },

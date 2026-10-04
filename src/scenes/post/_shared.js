@@ -1,9 +1,19 @@
 // Shared helpers for the Post-Processing scenes (src/scenes/post/*).
 //
+//  - gamePass(): renders the procedural game image as an ordinary first pass named `game`.
+//    WORKAROUND: shaderScene({ input: 'game' }) currently binds the game render target as a sampled
+//    texture while rendering into it (WebGPU validation error / WebGL feedback loop), so we draw it ourselves.
 //  - overlays(): tiny manager for `.tag` labels in ctx.overlay (created lazily from shaderScene's bind()).
 //  - compareSplit(): the draggable-by-hover before/after divider used by most post effects.
 //  - SPLIT_WGSL: draws that divider in the final image (portable WGSL; needs `u.resolution`).
 //  - GAME_POS_WGSL: where things are in the procedural `game` image (hero, torches) so effects can target them.
+
+import { GAME_SCENE_CODE, GAME_SCENE_INCLUDES } from '../../core/gamescene.js';
+
+/** A shaderScene pass that renders the animated platformer image into texture `game`. */
+export const gamePass = (extra = {}) => ({ name: 'game', format: 'rgba8unorm', code: GAME_SCENE_CODE, ...extra });
+/** Merge your includes with the ones the game shader needs. */
+export const withGameIncludes = (list) => [...new Set([...list, ...GAME_SCENE_INCLUDES])];
 
 /**
  * Overlay label manager. Call begin(ctx) at the top of bind(), show(...) for every label that should be
@@ -59,8 +69,8 @@ export function compareSplit(state, ctx, enabled, ov, labels = ['Original', 'Eff
   else state.split += (0.5 - state.split) * Math.min(1, (ctx.dt || 1 / 60) * 5 + (ctx.paused ? 1 : 0));
   const pct = (state.split * 100).toFixed(2);
   if (ov) {
-    ov.show('cmpL', `◀ ${labels[0]}`, `top:46px;left:calc(${pct}% - 10px);transform:translateX(-100%);opacity:.92`);
-    ov.show('cmpR', `${labels[1]} ▶`, `top:46px;left:calc(${pct}% + 10px);opacity:.92`);
+    ov.show('cmpL', `◀ ${labels[0]}`, `top:calc(50% - 44px);left:calc(${pct}% - 10px);transform:translateX(-100%);opacity:.92`);
+    ov.show('cmpR', `${labels[1]} ▶`, `top:calc(50% - 44px);left:calc(${pct}% + 10px);opacity:.92`);
   }
   return state.split * ctx.width;
 }

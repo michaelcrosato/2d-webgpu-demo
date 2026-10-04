@@ -327,6 +327,7 @@ export default {
       kind: 'Benchmark',
       note: 'The classic 2D renderer stress test (from PixiJS): every bunny bounces with gravity. <b>Hold the mouse</b> to spawn more and watch the counter — the sprite count climbs into the hundreds of thousands while the draw-call count stays at <b>1</b>.',
       hint: 'Hold the mouse to spawn bunnies at the cursor. Buttons add 10k / 100k at once.',
+      params: { size: 2 },
     },
     {
       id: 'bullets',
@@ -334,6 +335,7 @@ export default {
       kind: 'In a game',
       note: 'Emitters fire rotating spirals, counter-rotating rosettes and curving galaxy arms. Every bullet is a slot in a GPU ring buffer: the compute shader spawns, moves, curves and kills them; one draw renders all of them.',
       hint: 'Hold the mouse to drag the emitters to the cursor.',
+      params: { size: 2 },
     },
     {
       id: 'crowd',
@@ -341,6 +343,7 @@ export default {
       kind: 'In a game',
       note: 'Thousands of animated knights wander, idle and turn around. Each picks its animation frame on the GPU from its own phase offset, gets a team color by palette swap, and is y-sorted for free by the <b>depth buffer</b>. <b>Hold the mouse</b> to rally them.',
       hint: 'Hold the mouse to rally the army to the cursor; release to send them back.',
+      params: { size: 1 },
     },
   ],
   controls: [
@@ -375,7 +378,7 @@ export default {
     { type: 'slider', key: 'spin', label: 'Spin', min: -4, max: 4, step: 0.01, value: 1.2, showFor: ['bullets'], help: 'How fast the pattern rotates (radians per second).' },
     { type: 'slider', key: 'curve', label: 'Bullet curve', min: 0, max: 2, step: 0.01, value: 0.7, showFor: ['bullets'], help: 'Turn rate of galaxy bullets — they steer in flight.' },
     { type: 'heading', label: 'Army', showFor: ['crowd'] },
-    { type: 'slider', key: 'count', label: 'Soldiers', min: 1000, max: 300000, step: 1000, value: 20000, log: true, showFor: ['crowd'], format: (v) => fmt(v) },
+    { type: 'slider', key: 'count', label: 'Soldiers', min: 500, max: 300000, step: 100, value: 3000, log: true, showFor: ['crowd'], format: (v) => fmt(v) },
     { type: 'slider', key: 'walkSpeed', label: 'Walk speed', min: 5, max: 150, step: 1, value: 40, showFor: ['crowd'] },
     { type: 'slider', key: 'animFps', label: 'Run animation fps', min: 2, max: 24, step: 1, value: 10, showFor: ['crowd'] },
     { type: 'toggle', key: 'ysort', label: 'Y-sort with the depth buffer', value: true, showFor: ['crowd'], help: 'Off = drawn in buffer order: knights further back paint over the ones in front.' },
@@ -532,7 +535,7 @@ pass.end();`,
     const shapes = new ShapeBatch(gpu);
     const cam = new Camera2D();
 
-    const readout = tag(ctx, 'right:8px;bottom:8px;text-align:right;line-height:1.5');
+    const readout = tag(ctx, 'right:8px;top:48px;text-align:right;line-height:1.45');
 
     // ---- simulation state (CPU side only knows counts) ----
     let count = 0; // live bunnies / soldiers
@@ -625,7 +628,7 @@ pass.end();`,
             count += add;
           }
         } else if (mode === 2 && running) {
-          const want = Math.min(MAX, Math.round(ctx.testMode ? Math.min(p.count, 4000) : p.count));
+          const want = Math.min(MAX, Math.round(ctx.testMode ? Math.min(p.count, 1500) : p.count));
           if (want > count) {
             spawnFrom = count;
             spawnCount = want - count;
@@ -773,10 +776,10 @@ pass.end();`,
         const shown = mode === 1 ? aliveCount : count;
         const capped = !batched && count > MAX_DRAWS ? ` <span style="color:#fca5a5">(capped at ${fmt(MAX_DRAWS)} draws)</span>` : '';
         readout.innerHTML =
-          `<b style="font-size:15px;color:#fcd34d">${what}: ${fmt(shown)}</b><br>` +
-          `Sprite draw calls: <b style="color:${draws > 2 ? '#fca5a5' : '#86efac'}">${fmt(draws)}</b>${capped}<br>` +
-          `Compute dispatches: ${running && count > 0 ? 1 : 0} · CPU to record draws: ${cpuMs.toFixed(cpuMs < 1 ? 3 : 1)} ms` +
-          (mode === 1 ? `<br>Ring buffer: ${fmt(BULLET_CAP)} slots` : '');
+          `<b style="font-size:14px;color:#fcd34d">${what}: ${fmt(shown)}</b><br>` +
+          `draw calls: <b style="color:${draws > 2 ? '#fca5a5' : '#86efac'}">${fmt(draws)}</b>${capped}<br>` +
+          `CPU record: ${cpuMs.toFixed(cpuMs < 1 ? 3 : 1)} ms` +
+          (mode === 1 ? `<br>ring buffer: ${fmt(BULLET_CAP)} slots` : '');
       },
     };
   },

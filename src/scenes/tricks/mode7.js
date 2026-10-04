@@ -7,7 +7,7 @@ import { overlayTag, keyAxis, KEYS, anyKey, fbm2, vnoise, mipPack, MIP_WGSL, cla
 // airship physics, autopilot and billboard projection run in JavaScript and arrive via bind().
 
 const TRACK_N = 1024; // track map size (texels = world units)
-const WORLD_N = 512; // airship world map size
+const WORLD_N = 1024; // airship world map size
 const NS = 24; // billboard slots
 
 // ------------------------------------------------------------------------------------ track bake
@@ -56,7 +56,8 @@ function bake() {
   bakePromise = (async () => {
     const atlas = await getAtlas();
     const center = trackCenterline();
-    return { atlas, center, track: mipPack(paintTrack(center)), world: mipPack(paintWorld()), props: paintProps() };
+    const w = paintWorld();
+    return { atlas, center, track: mipPack(paintTrack(center)), world: mipPack(w.canvas), worldTrees: w.trees, props: paintProps() };
   })();
   return bakePromise;
 }
@@ -128,26 +129,21 @@ function paintTrack(center) {
   g.strokeStyle = '#d8bf86';
   g.lineWidth = ROAD_W + KERB * 2 + 30;
   g.stroke(path);
-  g.strokeStyle = 'rgba(160,130,80,0.35)';
-  g.lineWidth = ROAD_W + KERB * 2 + 30;
-  g.setLineDash([2, 5]);
-  g.stroke(path);
-  g.setLineDash([]);
+
   // kerbs: red base + white dashes
   g.strokeStyle = '#d23a3a';
   g.lineWidth = ROAD_W + KERB * 2;
   g.stroke(path);
   g.strokeStyle = '#f4f4f4';
+  g.lineCap = 'butt'; // round caps would grow every dash by half the line width
   g.setLineDash([10, 10]);
   g.stroke(path);
   g.setLineDash([]);
+  g.lineCap = 'round';
   // asphalt
   g.strokeStyle = '#6b6f78';
   g.lineWidth = ROAD_W;
   g.stroke(path);
-  g.save();
-  g.clip(new Path2D()); // reset
-  g.restore();
   // asphalt grain
   const off = makeCanvas(N, N);
   const og = off.getContext('2d');
@@ -164,6 +160,7 @@ function paintTrack(center) {
   // center line
   g.strokeStyle = 'rgba(255,255,255,0.55)';
   g.lineWidth = 2;
+  g.lineCap = 'butt';
   g.setLineDash([14, 18]);
   g.stroke(path);
   g.setLineDash([]);
@@ -223,8 +220,8 @@ function paintWorld() {
       const u = x / N - 0.5;
       const v = y / N - 0.5;
       const r = Math.hypot(u * 1.1, v);
-      let h = fbm2(x / 70, y / 70, 6, 3) * 1.15 - 0.2 + 0.35 * (0.55 - r * 1.25);
-      h += 0.12 * (fbm2(x / 20, y / 20, 3, 9) - 0.5);
+      let h = fbm2(x / 140, y / 140, 6, 3) * 1.15 - 0.2 + 0.35 * (0.55 - r * 1.25);
+      h += 0.12 * (fbm2(x / 40, y / 40, 3, 9) - 0.5);
       H[y * N + x] = h;
     }
   }
@@ -235,8 +232,8 @@ function paintWorld() {
       const h = H[i];
       const hx = H[y * N + Math.min(N - 1, x + 1)] - H[y * N + Math.max(0, x - 1)];
       const hy = H[Math.min(N - 1, y + 1) * N + x] - H[Math.max(0, y - 1) * N + x];
-      const shade = 1 - (hx + hy) * 9; // light from the north-west
-      const moist = vnoise(x / 40, y / 40, 21);
+      const shade = 1 - (hx + hy) * 18; // light from the north-west
+      const moist = vnoise(x / 80, y / 80, 21);
       let col;
       if (h < sea - 0.07) col = [28, 78, 150];
       else if (h < sea) col = [52, 120, 190];
@@ -247,7 +244,7 @@ function paintWorld() {
       else col = [242, 244, 250];
       let s = h < sea ? 1 : shade;
       // forest canopy texture
-      if (h >= sea + 0.025 && h < 0.55 && moist > 0.55 && vnoise(x / 2.2, y / 2.2, 5) > 0.55) s *= 0.75;
+      if (h >= sea + 0.025 && h < 0.55 && moist > 0.55 && vnoise(x / 3, y / 3, 5) > 0.55) s *= 0.75;
       // shallow-water ripples near the shore
       if (h < sea && h > sea - 0.03) s *= 1.08;
       d[i * 4] = clamp(col[0] * s, 0, 255);
@@ -257,17 +254,26 @@ function paintWorld() {
     }
   }
   g.putImageData(img, 0, 0);
+  // candidate spots for billboard trees: forests and meadows
+  const trees = [];
+  const RT = rng(23);
+  for (let k = 0; k < 9000 && trees.length < 420; k++) {
+    const x = RT() * N;
+    const y = RT() * N;
+    const h = H[(y | 0) * N + (x | 0)];
+    if (h > sea + 0.04 && h < 0.55 && vnoise(x / 80, y / 80, 21) > 0.5) trees.push([x, y]);
+  }
   // towns, a castle and roads
   const R = rng(11);
   const towns = [];
   for (let k = 0; k < 400 && towns.length < 9; k++) {
-    const x = 40 + R() * (N - 80);
-    const y = 40 + R() * (N - 80);
+    const x = 60 + R() * (N - 120);
+    const y = 60 + R() * (N - 120);
     const h = H[(y | 0) * N + (x | 0)];
-    if (h > sea + 0.04 && h < 0.52 && towns.every((t) => Math.hypot(t[0] - x, t[1] - y) > 60)) towns.push([x, y]);
+    if (h > sea + 0.04 && h < 0.52 && towns.every((t) => Math.hypot(t[0] - x, t[1] - y) > 120)) towns.push([x, y]);
   }
   g.strokeStyle = '#b78e57';
-  g.lineWidth = 2;
+  g.lineWidth = 3;
   for (let i = 1; i < towns.length; i++) {
     g.beginPath();
     g.moveTo(towns[i - 1][0], towns[i - 1][1]);
@@ -292,7 +298,7 @@ function paintWorld() {
       g.fillRect(x - 1, y - 12, 2, 5);
     }
   });
-  return c;
+  return { canvas: c, trees };
 }
 
 /** Kart (3 steering frames) + airship, painted as pixel art. */
@@ -387,7 +393,7 @@ function newState(ctx, data) {
     if (!ok) continue;
     const roll = R();
     const frame = roll < 0.6 ? 0 : roll < 0.82 ? 1 : roll < 0.92 ? 2 : 5;
-    const size = frame === 0 ? 34 + R() * 14 : frame === 5 ? 14 : 12 + R() * 6;
+    const size = frame === 0 ? 34 + R() * 14 : frame === 5 ? 8 : 12 + R() * 6;
     props.push({ x, y, size, frame, kind: 'prop' });
   }
   for (const f of COIN_GROUPS) {
@@ -396,20 +402,19 @@ function newState(ctx, data) {
     for (let k = 0; k < 4; k++) {
       const i = (i0 + k * 5) % n;
       const lat = (k % 2 ? 1 : -1) * 10;
-      props.push({ x: center[i][0] - Math.sin(a) * lat, y: center[i][1] + Math.cos(a) * lat, size: 9, frame: COIN0, kind: 'coin', hidden: 0 });
+      props.push({ x: center[i][0] - Math.sin(a) * lat, y: center[i][1] + Math.cos(a) * lat, size: 5, frame: COIN0, kind: 'coin', hidden: 0 });
     }
   }
   // airship world: castles / landmarks as billboards
-  const worldProps = [];
   const R2 = rng(9);
-  for (let k = 0; k < 24; k++) worldProps.push({ x: R2() * WORLD_N, y: R2() * WORLD_N, size: 10 + R2() * 6, frame: k % 3 === 0 ? 4 : 3, kind: 'prop' });
+  const worldProps = data.worldTrees.map(([x, y]) => ({ x, y, size: 7 + R2() * 4, frame: R2() < 0.75 ? 0 : 1, kind: 'prop' }));
   return {
     ctx,
     data,
     props,
     worldProps,
     kart: { x: center[4][0], y: center[4][1], a: Math.atan2(center[8][1] - center[0][1], center[8][0] - center[0][0]), v: 60, idx: 4, steer: 0, camA: 0 },
-    ship: { x: WORLD_N * 0.5, y: WORLD_N * 0.62, a: -1.2, v: 26, h: 0, t: 0 },
+    ship: { x: WORLD_N * 0.5, y: WORLD_N * 0.62, a: -1.2, v: 42, h: 0, t: 0 },
     camA: null,
     idle: 99,
     coins: 0,
@@ -533,10 +538,6 @@ function project(view, cam, wx, wy) {
 }
 
 function computeBind(params, ctx) {
-  if (!S || S.ctx !== ctx) {
-    if (!S?.data && !bakeCache) return null;
-    S = newState(ctx, bakeCache);
-  }
   const st = S;
   const ex = ctx.example;
   if (st.lastEx !== ex) {
@@ -545,9 +546,9 @@ function computeBind(params, ctx) {
     st.camA = null;
     st.lastEx = ex;
     if (ex === 'explain') {
-      st.tags.l = overlayTag(ctx, 'left:25%;top:46px;transform:translateX(-50%)');
+      st.tags.l = overlayTag(ctx, 'left:25%;top:40px;transform:translateX(-50%)');
       st.tags.l.textContent = 'The map (a flat texture), seen from above';
-      st.tags.r = overlayTag(ctx, 'left:75%;top:46px;transform:translateX(-50%)');
+      st.tags.r = overlayTag(ctx, 'left:75%;top:40px;transform:translateX(-50%)');
       st.tags.r.textContent = 'The same map, projected row by row';
     }
     st.tags.hud = overlayTag(ctx, 'right:8px;bottom:8px');
@@ -565,15 +566,14 @@ function computeBind(params, ctx) {
   const f = vw / 2 / Math.tan(fov / 2);
   const hy = H * params.horizon;
   const view = { cx: x0 + vw / 2, f, hy };
-  let cam;
-  if (isShip) {
-    const s = st.ship;
-    const back = params.chase * 1.6;
-    cam = { x: s.x - Math.cos(st.camA) * back, y: s.y - Math.sin(st.camA) * back, a: st.camA, h: params.height + s.h };
-  } else {
-    const k = st.kart;
-    cam = { x: k.x - Math.cos(st.camA) * params.chase, y: k.y - Math.sin(st.camA) * params.chase, a: st.camA, h: params.height };
-  }
+  // The chase camera sits exactly far enough behind the player that its ground position lands at
+  // a fixed screen row (z = h·f / rowsBelowHorizon) — the same formula the shader inverts.
+  const groundRow = isShip ? 0.95 : 0.86;
+  const camH = isShip ? params.height + st.ship.h : params.height;
+  const chase = (camH * f) / Math.max(8, (groundRow - params.horizon) * H);
+  st.chase = chase;
+  const pl = isShip ? st.ship : st.kart;
+  const cam = { x: pl.x - Math.cos(st.camA) * chase, y: pl.y - Math.sin(st.camA) * chase, a: st.camA, h: camH };
 
   // billboards: project, cull, sort far -> near
   const list = [];
@@ -613,27 +613,26 @@ function computeBind(params, ctx) {
   const PW = 160;
   const PH = 48;
   if (isShip) {
+    // the airship hovers above its own shadow: fixed size & place on screen, shadow on the ground
     const s = st.ship;
     const q = project(view, cam, s.x, s.y);
-    const scale = q.k * 1.15;
-    const w = 48 * scale;
-    const h = 44 * scale;
-    const bob = Math.sin(ctx.time * 1.7) * 3 * scale;
-    const lift = (cam.h * q.k) * 0.55;
-    kartRect = [q.sx - w / 2, q.sy - h - lift + bob, w, h];
+    const w = Math.min(vw * 0.24, H * 0.42);
+    const h = (w * 44) / 48;
+    const bob = Math.sin(ctx.time * 1.7) * h * 0.03;
+    const cy = H * (0.6 + 0.04 * Math.min(1, s.h / 60)) + bob;
+    kartRect = [q.sx - w / 2, cy - h / 2, w, h];
     kartUV = [96 / PW, 0, 144 / PW, 44 / PH];
-    shadow = [s.x, s.y, 12, 0.45];
+    shadow = [s.x, s.y, (w / q.k) * 0.3, 0.45];
   } else {
     const k = st.kart;
     const q = project(view, cam, k.x, k.y);
-    const scale = q.k * 0.55;
-    const w = 32 * scale;
-    const h = 24 * scale;
+    const w = 7 * q.k; // the kart is 7 world units wide
+    const h = (w * 24) / 32;
     const frame = k.steer < -0.35 ? 0 : k.steer > 0.35 ? 2 : 1;
-    const bounce = Math.abs(k.v) > 20 ? Math.round(Math.sin(ctx.time * 30) * 0.5 + 0.5) * scale * 0.6 : 0;
-    kartRect = [q.sx - w / 2, q.sy - h + bounce, w, h];
+    const bounce = Math.abs(k.v) > 20 && Math.sin(ctx.time * 30) > 0 ? h / 24 : 0;
+    kartRect = [q.sx - w / 2, q.sy - h * 0.92 + bounce, w, h];
     kartUV = [(frame * 32) / PW, 0, (frame * 32 + 32) / PW, 24 / PH];
-    shadow = [k.x, k.y, 9, 0.5];
+    shadow = [k.x, k.y, 4.2, 0.55];
   }
 
   const hud = st.tags.hud;
@@ -644,6 +643,7 @@ function computeBind(params, ctx) {
   return {
     cam: [cam.x, cam.y, cam.a, cam.h],
     view: [x0, vw, hy, f],
+    chase,
     sprRect,
     sprWorld,
     frames: st.frames,
@@ -655,17 +655,30 @@ function computeBind(params, ctx) {
 }
 
 let bakeCache = null;
+let TEST = false;
 
 const FRAG = /* wgsl */ `
 ${MIP_WGSL}
 const NS: i32 = ${NS};
+
+// "Sharp bilinear": when a texel covers several pixels, only blend across a 1-pixel band at texel
+// edges, so magnified pixel art stays crisp while minified texels still filter smoothly.
+fn sharpen(m: vec2f, n: f32, pxPerTexel: f32) -> vec2f {
+  let t = m * n - vec2f(0.5);
+  let i = floor(t);
+  let s = max(pxPerTexel, 1.0);
+  let g = clamp((fract(t) - vec2f(0.5)) * s + vec2f(0.5), vec2f(0.0), vec2f(1.0));
+  return (i + g + vec2f(0.5)) / n;
+}
 
 fn mapSample(t: texture_2d<f32>, m: vec2f, lod: f32, n: f32, mode: f32) -> vec3f {
   if (mode < 0.5) { return TEXN(t, mipCoord(m, 0.0, n)).rgb; }
   if (mode < 1.5) { return TEX(t, mipCoord(m, 0.0, n)).rgb; }
   let l = clamp(lod, 0.0, 6.0);
   let l0 = floor(l);
-  let a = TEX(t, mipCoord(m, l0, n)).rgb;
+  var m0 = m;
+  if (l0 < 0.5) { m0 = sharpen(m, n, exp2(-lod)); }
+  let a = TEX(t, mipCoord(m0, l0, n)).rgb;
   let b = TEX(t, mipCoord(m, min(l0 + 1.0, 7.0), n)).rgb;
   return mix(a, b, l - l0);
 }
@@ -708,7 +721,9 @@ fn skyColor(p: vec2f, hy: f32, f: f32, cx: f32, ang: f32, ex: i32) -> vec3f {
   let mh = 0.05 + 0.035 * (0.5 + 0.5 * sin(phi * 3.0 + 1.3)) * (0.7 + 0.3 * sin(phi * 7.0)) + 0.01 * sin(phi * 23.0) + 0.005 * sin(phi * 41.0 + 2.0);
   let snow = smoothstep(mh - 0.012, mh - 0.004, el) * smoothstep(0.075, 0.09, mh);
   let mcol = mix(vec3f(0.42, 0.48, 0.66), vec3f(0.95, 0.96, 1.0), snow);
-  c = mix(c, mix(mcol, c, 0.35 + ship * 0.3), step(el, mh));
+  c = mix(c, mix(mcol, c, 0.35), step(el, mh) * (1.0 - ship));
+  // from altitude: the curved haze line of the far sea instead of mountains
+  c = mix(c, vec3f(0.93, 0.86, 0.84), smoothstep(0.06, 0.0, el) * ship);
   // near hills with a tree line (not on the airship: it flies above them)
   let hh = 0.018 + 0.01 * sin(phi * 5.0 + 0.7) + 0.004 * sin(phi * 61.0) + 0.006 * smoothstep(0.3, 1.0, sin(phi * 37.0));
   c = mix(c, mix(vec3f(0.16, 0.42, 0.2), vec3f(0.3, 0.5, 0.35), ship), step(el, hh) * (1.0 - ship));
@@ -778,11 +793,13 @@ fn mode7(p: vec2f, ex: i32) -> vec3f {
     let wc = cam.xy + fwd * zc + rgt * (p.x - cx) * zc / v.w + vec2f(u.time * 6.0, u.time * 2.0);
     let cl = fwidth(wc);
     let fade = 1.0 - clamp((log2(max(cl.x, cl.y)) - 1.0) / 3.0, 0.0, 1.0);
-    let dens = smoothstep(0.62 - u.clouds * 0.3, 0.85, fbm(wc / 90.0, 4) * 0.5 + 0.5);
-    let gshadow = smoothstep(0.62 - u.clouds * 0.3, 0.85, fbm((w + vec2f(u.time * 6.0, u.time * 2.0) + vec2f(25.0, -18.0)) / 90.0, 4) * 0.5 + 0.5);
-    col *= 1.0 - 0.35 * gshadow;
-    let cc = mix(vec3f(0.95, 0.95, 1.0), vec3f(0.72, 0.76, 0.88), smoothstep(0.85, 0.6, dens));
-    col = mix(col, cc, dens * mix(0.6, 0.9, fade) * u.clouds);
+    let cn = fbm(wc / 70.0, 5) * 0.5 + 0.5;
+    let dens = smoothstep(0.66 - u.clouds * 0.22, 0.9, cn);
+    let gshadow = smoothstep(0.66 - u.clouds * 0.22, 0.9, fbm((w + vec2f(u.time * 6.0, u.time * 2.0) + vec2f(25.0, -18.0)) / 70.0, 5) * 0.5 + 0.5);
+    col *= 1.0 - 0.4 * gshadow;
+    // lit tops, grey-blue thin edges
+    let cc = mix(vec3f(0.62, 0.68, 0.82), vec3f(1.0, 0.98, 0.96), smoothstep(0.0, 0.7, dens));
+    col = mix(col, cc, dens * mix(0.55, 0.8, fade));
   }
   // distance haze toward the horizon color
   var haze = vec3f(0.66, 0.8, 0.95);
@@ -828,8 +845,10 @@ fn sprites(p: vec2f, colIn: vec3f, ex: i32) -> vec3f {
 
 fn mapPanel(p: vec2f) -> vec3f {
   let half = u.view.x;
-  let side = min(half, u.resolution.y) * 0.86;
-  let o = vec2f((half - side) * 0.5, (u.resolution.y - side) * 0.5 + 12.0);
+  let side = min(half * 0.92, u.resolution.y - 84.0);
+  let o = vec2f((half - side) * 0.5, 70.0 + (u.resolution.y - 84.0 - side) * 0.5);
+  let box = sdBox(p - (o + vec2f(side * 0.5)), vec2f(side * 0.5));
+  let clipM = 1.0 - smoothstep(-1.0, 0.0, box);
   let m = (p - o) / side;
   var col = vec3f(0.06, 0.07, 0.1);
   let n = ${TRACK_N}.0;
@@ -856,7 +875,7 @@ fn mapPanel(p: vec2f) -> vec3f {
   let e2 = cam.xy + (fwd - rgt * tanH) * far;
   let cp = o + cam.xy / n * side;
   let d1 = min(sdSegment(p, cp, o + e1 / n * side), sdSegment(p, cp, o + e2 / n * side));
-  col = mix(col, vec3f(1.0), (1.0 - smoothstep(0.8, 1.8, d1)) * 0.85);
+  col = mix(col, vec3f(1.0), (1.0 - smoothstep(0.8, 1.8, d1)) * 0.85 * clipM);
   // each colored screen row is a straight line across the map
   if (u.rows > 0.5) {
     for (var k = 0; k < 6; k++) {
@@ -865,7 +884,7 @@ fn mapPanel(p: vec2f) -> vec3f {
       let a = cam.xy + fwd * zr - rgt * zr * tanH;
       let b = cam.xy + fwd * zr + rgt * zr * tanH;
       let ds = sdSegment(p, o + a / n * side, o + b / n * side);
-      col = mix(col, rowColor(k), 1.0 - smoothstep(1.0, 2.2, ds));
+      col = mix(col, rowColor(k), (1.0 - smoothstep(1.0, 2.2, ds)) * clipM);
     }
   }
   // camera and kart markers
@@ -875,8 +894,7 @@ fn mapPanel(p: vec2f) -> vec3f {
   col = mix(col, vec3f(0.0), 1.0 - smoothstep(5.0, 6.0, length(p - cp)));
   col = mix(col, vec3f(1.0, 0.9, 0.3), 1.0 - smoothstep(3.5, 4.5, length(p - cp)));
   // frame
-  let fb = sdBox(p - (o + vec2f(side * 0.5)), vec2f(side * 0.5));
-  col = mix(col, vec3f(0.5, 0.55, 0.7), 1.0 - smoothstep(0.5, 1.5, abs(fb)));
+  col = mix(col, vec3f(0.5, 0.55, 0.7), 1.0 - smoothstep(0.5, 1.5, abs(box)));
   return col;
 }
 
@@ -903,7 +921,7 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
 `;
 
 export default shaderScene({
-  interaction: 'Arrows / WASD to drive (autopilot takes over when you let go). On the airship, Up/Down changes altitude.',
+  interaction: 'Arrows / WASD: drive · let go for autopilot',
   keys: true,
   examples: [
     {
@@ -911,21 +929,22 @@ export default shaderScene({
       label: 'Mode 7 explained',
       kind: 'Abstract',
       note: 'Left: the flat map texture with the camera (yellow), its field of view (white lines) and the area it can see. Right: the same map projected. Each <b>colored screen row</b> samples exactly one <b>straight line</b> of the map — rows near the horizon reach far away, rows at the bottom are close.',
-      params: { pixel: 1, height: 22, horizon: 0.36, fov: 70, chase: 34, fog: 0.4 },
+      params: { pixel: 1, height: 22, horizon: 0.36, fov: 70, fog: 0.4 },
     },
     {
       id: 'kart',
       label: 'Kart racer',
       kind: 'In a game',
       note: 'A Super-Mario-Kart-style circuit: the whole track is one 1024² texture. Trees, coins and the kart are flat <b>billboard sprites</b> scaled by 1/distance. Drive over the yellow boost pads, collect coins.',
-      params: { pixel: 2, height: 20, horizon: 0.34, fov: 70, chase: 34, fog: 0.5 },
+      params: { pixel: 2, height: 20, horizon: 0.34, fov: 70, fog: 0.35 },
     },
     {
       id: 'airship',
       label: 'Airship over the world map',
       kind: 'In a game',
       note: 'The Final Fantasy VI trick: a world map tilted toward the horizon, with a second Mode 7 plane for clouds that drift at a different height (so they parallax against the ground) and cast shadows.',
-      params: { pixel: 2, height: 64, horizon: 0.3, fov: 65, chase: 34, fog: 0.9 },
+      params: { pixel: 2, height: 64, horizon: 0.3, fov: 65, fog: 0.35 },
+      hint: '←/→ steer · ↑/↓ climb & descend · let go for autopilot',
     },
   ],
   controls: [
@@ -933,7 +952,6 @@ export default shaderScene({
     { type: 'slider', key: 'height', label: 'Camera height', min: 4, max: 140, step: 0.5, value: 22, help: 'Higher = steeper view, rows sample a bigger area. Low = racing-game feel.' },
     { type: 'slider', key: 'fov', label: 'Field of view (°)', min: 30, max: 120, step: 1, value: 70, help: 'Sets the focal length: how fast columns fan out.' },
     { type: 'slider', key: 'horizon', label: 'Horizon height', min: 0.12, max: 0.6, step: 0.005, value: 0.36, help: 'Moving the horizon = tilting the camera (pitch).' },
-    { type: 'slider', key: 'chase', label: 'Chase distance', min: 12, max: 90, step: 1, value: 34, help: 'How far behind the kart the camera sits.' },
     { type: 'heading', label: 'Look' },
     {
       type: 'select', key: 'texFilter', label: 'Texture filtering', value: 'mip',
@@ -942,7 +960,7 @@ export default shaderScene({
     },
     { type: 'slider', key: 'pixel', label: 'Pixel size', min: 1, max: 4, step: 1, value: 2, help: '2–3 ≈ the SNES’s 256×224 chunky look.' },
     { type: 'slider', key: 'fog', label: 'Distance haze', min: 0, max: 2, step: 0.01, value: 0.5 },
-    { type: 'slider', key: 'clouds', label: 'Cloud layer', min: 0, max: 1, step: 0.01, value: 0.6, showFor: ['airship'], help: 'A second Mode 7 plane halfway between camera and ground.' },
+    { type: 'slider', key: 'clouds', label: 'Cloud layer', min: 0, max: 1, step: 0.01, value: 0.4, showFor: ['airship'], help: 'A second Mode 7 plane halfway between camera and ground.' },
     { type: 'toggle', key: 'rows', label: 'Show sampled rows', value: true, showFor: ['explain'] },
     { type: 'toggle', key: 'autopilot', label: 'Autopilot when idle', value: true },
   ],
@@ -952,7 +970,7 @@ export default shaderScene({
     sprRect: `array<vec4f, ${NS}>`, sprWorld: `array<vec4f, ${NS}>`, frames: 'array<vec4f, 16>',
   },
   include: ['hash', 'noise', 'sdf', 'color', 'math'],
-  renderScale: (p) => 1 / Math.max(1, p.pixel || 1),
+  renderScale: (p) => 1 / Math.max(TEST ? 3 : 1, p.pixel || 1),
   textures: {
     track: { source: async () => (await bake()).track, filter: 'linear' },
     world: { source: async () => (await bake()).world, filter: 'linear' },
@@ -967,6 +985,7 @@ export default shaderScene({
     },
   },
   bind(params, ctx) {
+    TEST = !!ctx.testMode;
     if (!bakeCache) return {};
     if (!S || S.ctx !== ctx) {
       S = newState(ctx, bakeCache);

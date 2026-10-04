@@ -25,7 +25,7 @@ export default {
       label: 'Three rules',
       kind: 'Abstract',
       note: 'Every dart only looks at neighbours inside its <b>view radius</b> and blends three steering urges: <b>separation</b> (don’t crowd), <b>alignment</b> (match heading), <b>cohesion</b> (move to the local centre). Color = heading. Turn on <i>Show spatial grid</i> to see how the GPU finds neighbours fast.',
-      params: { count: 12000, size: 7, radius: 40, sep: 1.6, ali: 1.0, coh: 0.9, speed: 230, trails: 0 },
+      params: { count: 8000, size: 7, radius: 40, sep: 1.6, ali: 1.0, coh: 0.9, speed: 230, trails: 0 },
     },
     {
       id: 'birds',
@@ -39,14 +39,14 @@ export default {
       label: 'Fish school + shark',
       kind: 'In a game',
       note: 'An ambient reef for an underwater level. The shark follows your mouse (or patrols on its own) and the school opens up around it — the classic “fountain effect”. Note the cheap shadows: the fish layer is re-sampled with an offset.',
-      params: { count: 3500, size: 10, radius: 48, sep: 1.8, ali: 1.2, coh: 1.0, speed: 190, trails: 0 },
+      params: { count: 2400, size: 10, radius: 48, sep: 1.8, ali: 1.2, coh: 1.0, speed: 190, trails: 0 },
     },
     {
       id: 'fleets',
       label: 'Space fleets',
       kind: 'In a game',
       note: 'Two factions of fighters: each flocks only with its own team and dodges the enemy, so the swarms weave through each other. Additive engine glow + motion trails. Hold the mouse to set a rally point for both fleets.',
-      params: { count: 9000, size: 6.5, radius: 42, sep: 1.4, ali: 1.3, coh: 1.0, speed: 300, trails: 0.86 },
+      params: { count: 4000, size: 5.5, radius: 44, sep: 2.4, ali: 1.3, coh: 0.8, speed: 300, trails: 0.8 },
     },
   ],
   controls: [
@@ -64,7 +64,7 @@ export default {
       min: 256,
       max: 131072,
       step: 1,
-      value: 12000,
+      value: 8000,
       log: true,
       format: (v) => Math.round(v).toLocaleString(),
       help: 'Thanks to the spatial grid the cost grows ~linearly, not with the square of the count.',
@@ -440,8 +440,8 @@ struct VOut {
     col = vec4f(0.05, 0.04, 0.07, 0.95);
   } else if (u.shape < 2.5) {
     // silvery backs that flash as the fish turn (light catches the scales)
-    let flash = pow(0.5 + 0.5 * sin(ang * 2.0 + b.rnd * 0.8), 6.0);
-    col = vec4f(mix(vec3f(0.18, 0.27, 0.36), vec3f(0.85, 0.95, 1.0), flash * 0.75), 1.0);
+    let flash = pow(0.5 + 0.5 * sin(ang * 2.0 + b.rnd * 0.8), 8.0);
+    col = vec4f(mix(vec3f(0.1, 0.16, 0.24), vec3f(0.85, 0.95, 1.0), flash * 0.8), 1.0);
   } else {
     col = vec4f(mix(vec3f(0.35, 0.85, 1.0), vec3f(1.0, 0.5, 0.2), b.team), 1.0);
   }
@@ -572,24 +572,28 @@ fn bgBirds(uv: vec2f, px: vec2f) -> vec3f {
 }
 
 fn caustic(p: vec2f, t: f32) -> f32 {
-  let v = voronoiEx(p, 1.0, t);
-  return 1.0 - smoothstep(0.0, 0.12, v.y - v.x);
+  let w = p + 0.35 * vec2f(perlin(p * 0.7 + t * 0.2), perlin(p * 0.7 + 5.0 - t * 0.2));
+  let v = voronoiEx(w, 1.0, t);
+  return pow(1.0 - smoothstep(0.0, 0.18, v.y - v.x), 2.0);
 }
 
 fn bgSea(uv: vec2f, wp: vec2f) -> vec3f {
   let p = wp / 1000.0;
   let n = fbm(p * 5.0, 4);
-  var sand = vec3f(0.86, 0.78, 0.56) * (0.82 + 0.25 * n);
-  sand *= 0.92 + 0.08 * sin(p.x * 70.0 + p.y * 25.0 + n * 9.0);
-  let rocks = smoothstep(0.42, 0.48, fbm(p * 2.2 + vec2f(7.3, 1.1), 5));
-  let weed = smoothstep(0.3, 0.38, fbm(p * 2.2 + vec2f(7.3, 1.1), 5)) * (1.0 - rocks);
-  sand = mix(sand, vec3f(0.3, 0.5, 0.25) * (0.7 + 0.5 * valueNoise(p * 80.0)), weed * 0.8);
-  sand = mix(sand, vec3f(0.42, 0.42, 0.4) * (0.6 + 0.6 * n), rocks);
-  var c = mix(sand, vec3f(0.02, 0.36, 0.48), 0.5);
-  let cz = caustic(p * 7.0, u.time * 0.6) * 0.6 + caustic(p * 11.0 + 3.0, -u.time * 0.45) * 0.4;
-  c += vec3f(0.55, 0.95, 0.9) * cz * 0.22;
-  let vig = length(uv - 0.5);
-  c = mix(c, vec3f(0.0, 0.12, 0.2), smoothstep(0.35, 0.8, vig));
+  // sandy lagoon floor with ripples, rocks and sea grass
+  var floor_ = vec3f(0.95, 0.88, 0.68) * (0.85 + 0.2 * n);
+  floor_ *= 0.94 + 0.06 * sin(p.x * 90.0 + p.y * 30.0 + n * 10.0);
+  let rk = fbm(p * 2.4 + vec2f(7.3, 1.1), 5);
+  let rocks = smoothstep(0.38, 0.44, rk);
+  let weed = smoothstep(0.24, 0.34, rk) * (1.0 - rocks);
+  floor_ = mix(floor_, vec3f(0.36, 0.55, 0.28) * (0.6 + 0.6 * valueNoise(p * 90.0)), weed * 0.75);
+  floor_ = mix(floor_, vec3f(0.5, 0.47, 0.42) * (0.55 + 0.5 * fbm(p * 14.0, 3)), rocks);
+  // water absorbs red first: tint toward turquoise
+  var c = floor_ * vec3f(0.45, 0.85, 0.85) + vec3f(0.0, 0.07, 0.1);
+  let cz = caustic(p * 13.0, u.time * 0.7) * 0.6 + caustic(p * 19.0 + 3.0, -u.time * 0.5) * 0.4;
+  c += vec3f(0.75, 1.0, 0.95) * cz * 0.28;
+  let vig = length((uv - 0.5) * vec2f(1.0, 0.8));
+  c = mix(c, vec3f(0.0, 0.2, 0.3), smoothstep(0.3, 0.85, vig) * 0.8);
   return c;
 }
 
@@ -648,8 +652,8 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
     let sh = TEX(layer, uv - soff / u.world).a;
     bg *= 1.0 - 0.38 * clamp(sh, 0.0, 1.0);
     let rs = wp - (u.pred.xy + soff * 1.6);
-    let ls = vec2f(dot(rs, pdir), dot(rs, pside)) / 70.0;
-    let ds = sdShark(ls, u.predPhase) * 70.0;
+    let ls = vec2f(dot(rs, pdir), dot(rs, pside)) / 105.0;
+    let ds = sdShark(ls, u.predPhase) * 105.0;
     bg *= 1.0 - 0.4 * (1.0 - smoothstep(-6.0, 10.0, ds));
   }
 
@@ -660,10 +664,10 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
   if (u.predOn > 0.5) {
     let r = wp - u.pred.xy;
     if (mode == 2) {
-      let lp = vec2f(dot(r, pdir), dot(r, pside)) / 70.0;
-      let d = sdShark(lp, u.predPhase) * 70.0;
+      let lp = vec2f(dot(r, pdir), dot(r, pside)) / 105.0;
+      let d = sdShark(lp, u.predPhase) * 105.0;
       let cov = clamp(0.5 - d / max(fwidth(d), 1e-3), 0.0, 1.0);
-      let shadeS = mix(vec3f(0.16, 0.2, 0.25), vec3f(0.33, 0.39, 0.44), smoothstep(0.0, 0.2, abs(lp.y)));
+      let shadeS = mix(vec3f(0.2, 0.25, 0.3), vec3f(0.42, 0.48, 0.52), smoothstep(0.05, 0.3, abs(lp.y)));
       col = mix(col, shadeS, cov);
     } else if (mode == 1) {
       let lp = vec2f(dot(r, pdir), dot(r, pside)) / 16.0;
@@ -723,38 +727,55 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
       clearLayer = true;
     };
     function spawnData() {
+      // Spawn boids as pre-formed groups (each with a shared heading) so the scene starts out
+      // looking like flocks instead of noise. The simulation takes over from there.
       const ex = ctx.example;
       const f = new Float32Array(MAX * 8);
       const u32 = new Uint32Array(f.buffer);
       const [W, H] = world;
-      const speed = (ctx.params.speed || 200) * 0.7;
-      for (let i = 0; i < MAX; i++) {
-        let x;
-        let y;
-        const team = i & 1;
+      const speed = (ctx.params.speed || 200) * 0.75;
+      const used = Math.max(1, Math.min(MAX, Math.round(ctx.params.count || 1000)));
+      const nGroups = ex === 'birds' ? 1 : ex === 'fish' ? 6 : ex === 'fleets' ? 10 : 36;
+      const per = used / nGroups;
+      const gauss = () => {
+        const u = Math.max(1e-6, Math.random());
+        return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random());
+      };
+      const groups = [];
+      for (let g = 0; g < nGroups; g++) {
+        const team = g & 1;
+        let cx = W * (0.1 + 0.8 * Math.random());
+        let cy = H * (0.1 + 0.8 * Math.random());
+        let heading = Math.random() * Math.PI * 2;
+        let spread = Math.sqrt(per) * (ex === 'fish' ? 7 : ex === 'fleets' ? 4 : 6);
         if (ex === 'birds') {
-          const a = Math.random() * Math.PI * 2;
-          const r = Math.sqrt(Math.random()) * H * 0.22;
-          x = W * 0.45 + Math.cos(a) * r * 1.6;
-          y = H * 0.42 + Math.sin(a) * r * 0.8;
+          cx = W * 0.45;
+          cy = H * 0.4;
+          spread = H * 0.11;
         } else if (ex === 'fleets') {
-          const a = Math.random() * Math.PI * 2;
-          const r = Math.sqrt(Math.random()) * H * 0.25;
-          x = (team ? W * 0.75 : W * 0.25) + Math.cos(a) * r;
-          y = H * 0.5 + Math.sin(a) * r;
-        } else {
-          x = Math.random() * W;
-          y = Math.random() * H;
+          cx = team ? W * (0.78 + 0.12 * Math.random()) : W * (0.1 + 0.12 * Math.random());
+          cy = H * (0.2 + 0.6 * Math.random());
+          heading = Math.atan2(H * 0.5 - cy, W * 0.5 - cx) + (Math.random() - 0.5) * 0.6;
         }
-        let a = Math.random() * Math.PI * 2;
-        if (ex === 'birds') a = Math.PI * 0.1 + (Math.random() - 0.5) * 0.8;
-        if (ex === 'fleets') a = team ? Math.PI + (Math.random() - 0.5) : Math.random() - 0.5;
+        groups.push({ cx, cy, heading, spread, team });
+      }
+      for (let i = 0; i < MAX; i++) {
+        const g = groups[i % nGroups];
+        let x = g.cx + gauss() * g.spread * (ex === 'birds' ? 1.9 : 1);
+        let y = g.cy + gauss() * g.spread * (ex === 'birds' ? 0.8 : 1);
+        let a = g.heading + gauss() * 0.25;
+        if (ex === 'birds') {
+          // a slowly rotating ball of starlings
+          a = Math.atan2(y - g.cy, x - g.cx) + Math.PI / 2 + gauss() * 0.2;
+        }
+        x = ((x % W) + W) % W;
+        y = ((y % H) + H) % H;
         f[i * 8] = x;
         f[i * 8 + 1] = y;
         f[i * 8 + 2] = Math.cos(a) * speed;
         f[i * 8 + 3] = Math.sin(a) * speed;
         f[i * 8 + 4] = Math.random();
-        f[i * 8 + 5] = team;
+        f[i * 8 + 5] = g.team;
         f[i * 8 + 6] = 0;
         u32[i * 8 + 7] = i;
       }
@@ -826,7 +847,7 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
           }
           pred.phase += dt * (1 + sl / 150);
           mouseMode = 1;
-          fear = 170;
+          fear = 230;
           predOn = 1;
         } else if (ptr.down && ptr.over !== false) {
           pred.x = mx;
@@ -883,20 +904,25 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
 
         // boid layer (faded for trails or cleared)
         const trails = p.trails || 0;
+        let drawBoids = true;
         if (clearLayer || trails <= 0) {
           gpu.clear(enc, layer, [0, 0, 0, 0]);
           clearLayer = false;
         } else if (dt > 0) {
           FU.set('fade', 1 - Math.pow(trails, dt * 60));
           fade.draw(enc, layer, {}, { clear: false });
+        } else {
+          drawBoids = false; // paused with trails: the layer already holds this frame
         }
-        const pass = enc.beginRenderPass({
-          colorAttachments: [{ view: layer.view, loadOp: 'load', storeOp: 'store' }],
-        });
-        pass.setPipeline(drawPipe);
-        pass.setBindGroup(0, draw.bind({ u: U, boids }));
-        pass.draw(6, n);
-        pass.end();
+        if (drawBoids) {
+          const pass = enc.beginRenderPass({
+            colorAttachments: [{ view: layer.view, loadOp: 'load', storeOp: 'store' }],
+          });
+          pass.setPipeline(drawPipe);
+          pass.setBindGroup(0, draw.bind({ u: U, boids }));
+          pass.draw(6, n);
+          pass.end();
+        }
 
         V.setAll({
           world,

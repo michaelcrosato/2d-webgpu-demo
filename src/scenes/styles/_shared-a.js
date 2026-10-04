@@ -11,8 +11,24 @@ import { GAME_SCENE_CODE, GAME_SCENE_INCLUDES } from '../../core/gamescene.js';
 // Rendering the same procedural platformer as our own first pass (double-buffered, so it never
 // reads what it writes) avoids that and behaves the same. Read it as texture `scene`.
 export const GAME_INCLUDES = GAME_SCENE_INCLUDES;
-export function gamePass(name = 'scene', extra = {}) {
-  return { name, format: 'rgba8unorm', code: GAME_SCENE_CODE, ...extra };
+/**
+ * The game scene as a pass. It reads its own render size (TEXSIZE of its double buffer) instead of
+ * u.resolution, so it can be rendered smaller than the canvas: `scale` = number or (params, ctx) => number.
+ * Under the headless test harness (software GPU) it renders at half size to keep frames fast.
+ */
+export function gamePass(name = 'scene', { scale = 1, ...extra } = {}) {
+  const code = GAME_SCENE_CODE.replace(/u\.resolution/g, `TEXSIZE(${name})`);
+  return {
+    name,
+    format: 'rgba8unorm',
+    code,
+    size: (params, ctx) => {
+      let s = typeof scale === 'function' ? scale(params, ctx) : scale;
+      if (ctx.testMode) s *= 0.5;
+      return [Math.max(1, Math.round(ctx.width * s)), Math.max(1, Math.round(ctx.height * s))];
+    },
+    ...extra,
+  };
 }
 
 // ------------------------------------------------------------------------------------ palettes
@@ -53,53 +69,75 @@ export function srgbToOklab([r, g, b]) {
 
 const palCache = new Map();
 /**
- * Uniform values for a palette: { pal, lab, palN, chromaW, spread, dark, light }.
- *   pal  : array<vec4f, 64> sRGB colors
+ * Uniform values for a palette: { pal, lab, palN, chromaW, dark, light }.
+ *   pal  : array<vec4f, 64> sRGB colors (ramp palettes are sorted dark → light)
  *   lab  : array<vec4f, 64> the same colors in OKLab (precomputed on the CPU)
- *   chromaW : 0 for single-hue ramps (match by lightness), 1 otherwise
- *   spread  : how far ordered dithering should push a color (≈ distance between palette steps)
+ *   chromaW : 0 for single-hue ramps (map brightness → ramp index), 1 = nearest color in OKLab
  */
 export function paletteUniforms(name) {
   if (palCache.has(name)) return palCache.get(name);
-  const list = (ALL_PALETTES[name] || ALL_PALETTES.pico8).slice(0, 64);
+  const ramp = RAMP.has(name);
+  let list = (ALL_PALETTES[name] || ALL_PALETTES.pico8).slice(0, 64).map((h) => {
+    const c = hexRgb(h);
+    return { c, L: srgbToOklab(c) };
+  });
+  if (ramp) list.sort((a, b) => a.L[0] - b.L[0]);
   const pal = new Float32Array(64 * 4);
   const lab = new Float32Array(64 * 4);
   let dark = null;
   let light = null;
-  list.forEach((h, i) => {
-    const c = hexRgb(h);
-    const L = srgbToOklab(c);
+  list.forEach(({ c, L }, i) => {
     pal.set([...c, 1], i * 4);
     lab.set([...L, 1], i * 4);
     if (!dark || L[0] < dark.L) dark = { L: L[0], c };
     if (!light || L[0] > light.L) light = { L: L[0], c };
   });
   const n = list.length;
-  const ramp = RAMP.has(name);
-  const spread = ramp ? (light.L - dark.L) / Math.max(1, n - 1) * 1.15 : 0.5 / Math.cbrt(n);
-  const out = { pal, lab, palN: n, chromaW: ramp ? 0 : 1, spread, dark: dark.c, light: light.c };
+  const out = { pal, lab, palN: n, chromaW: ramp ? 0 : 1, dark: dark.c, light: light.c };
   palCache.set(name, out);
   return out;
 }
 
 /** Uniform declarations to add to a shaderScene `uniforms` object for palette support. */
-export const PALETTE_UNIFORMS = { pal: 'array<vec4f, 64>', lab: 'array<vec4f, 64>', palN: 'f32', chromaW: 'f32', spread: 'f32' };
+export const PALETTE_UNIFORMS = { pal: 'array<vec4f, 64>', lab: 'array<vec4f, 64>', palN: 'f32', chromaW: 'f32' };
 
-// Portable WGSL: nearest palette color in OKLab (needs include 'color').
-// For ramp palettes chromaW = 0, so only lightness is compared.
+// Portable WGSL palette mapping (needs include 'color').
+//   ramp palettes (chromaW = 0): brightness picks an index on the dark→light ramp (classic Game Boy conversion)
+//   other palettes: nearest color in OKLab, a perceptual color space
+// palDither(c, thr, amt): ordered dithering between the TWO nearest palette colors. `thr` is the
+// Bayer/blue-noise threshold (0..1) for this pixel; the fraction of the way from the nearest color
+// towards the 2nd nearest decides how often this pixel picks the 2nd one. Clean 2-color patterns.
 export const PALETTE_WGSL = /* wgsl */ `
 fn toLab(c: vec3f) -> vec3f { return linearToOklab(srgbToLinear(clamp(c, vec3f(0.0), vec3f(1.0)))); }
-fn palNearest(c: vec3f) -> vec3f {
+fn palDither(c: vec3f, thr: f32, amt: f32) -> vec3f {
+  let th: f32 = mix(0.5, thr, amt);
+  if (u.chromaW < 0.5) {
+    let l: f32 = clamp(toLab(c).x, 0.0, 1.0);   // perceptual lightness
+    let idx: i32 = i32(clamp(floor(l * (u.palN - 1.0) + th), 0.0, u.palN - 1.0));
+    return u.pal[idx].xyz;
+  }
   let q: vec3f = toLab(c);
-  var best: f32 = 1.0e9;
-  var bestC: vec3f = vec3f(0.0);
+  var b1: f32 = 1.0e9;
+  var b2: f32 = 1.0e9;
+  var i1: i32 = 0;
+  var i2: i32 = 0;
   for (var i = 0; i < 64; i++) {
     if (f32(i) >= u.palN) { break; }
     let e: vec3f = q - u.lab[i].xyz;
-    let dd: f32 = e.x * e.x + u.chromaW * (e.y * e.y + e.z * e.z);
-    if (dd < best) { best = dd; bestC = u.pal[i].xyz; }
+    let dd: f32 = dot(e, e);
+    if (dd < b1) { b2 = b1; i2 = i1; b1 = dd; i1 = i; } else if (dd < b2) { b2 = dd; i2 = i; }
   }
-  return bestC;
+  let a: vec3f = u.lab[i1].xyz;
+  let ab: vec3f = u.lab[i2].xyz - a;
+  let t: f32 = clamp(dot(q - a, ab) / max(dot(ab, ab), 1.0e-6), 0.0, 1.0);
+  if (th < t) { return u.pal[i2].xyz; }
+  return u.pal[i1].xyz;
+}
+fn palNearest(c: vec3f) -> vec3f { return palDither(c, 0.5, 0.0); }
+// Contrast + saturation boost before quantizing ("punch"): small palettes need it.
+fn punchColor(c: vec3f, k: f32) -> vec3f {
+  let s: vec3f = adjustSaturation(c, 1.0 + (k - 1.0) * 1.6);
+  return clamp((s - vec3f(0.5)) * k + vec3f(0.5), vec3f(0.0), vec3f(1.0));
 }
 `;
 
@@ -132,11 +170,11 @@ export function setTag(ctx, key, text, css = '', visible = true) {
   return el;
 }
 
-/** Move a tag (CSS left/top in %, optional translate). */
-export function placeTag(el, leftPct, topPct, tx = '-50%') {
+/** Move a tag: left in % of the canvas, top as a CSS length, optional translateX. */
+export function placeTag(el, leftPct, top = '48px', tx = '-50%') {
   if (!el) return;
   const l = `${leftPct.toFixed(2)}%`;
-  const t = `${topPct.toFixed(2)}%`;
+  const t = typeof top === 'number' ? `${top.toFixed(2)}%` : top;
   if (el.style.left !== l) el.style.left = l;
   if (el.style.top !== t) el.style.top = t;
   const tr = `translateX(${tx})`;
