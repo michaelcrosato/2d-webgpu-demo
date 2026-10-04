@@ -49,6 +49,10 @@ function hexInfo(params, ctx) {
 
 const CODE = /* wgsl */ `
 // ================================================================== motif for the repetition demo
+// anti-aliased fill with a clamped derivative (fract() jumps at cell borders would otherwise
+// make fwidth huge and smear shapes)
+fn fillAA(d: f32) -> f32 { return clamp(0.5 - d / clamp(fwidth(d), 0.00001, 0.02), 0.0, 1.0); }
+
 // an asymmetric motif in a cell (q in -0.5..0.5) so flips and rotations are visible
 fn motif(q: vec2f, id: vec2f, t: f32) -> vec3f {
   let gb = mix(vec3f(0.14, 0.15, 0.25), vec3f(0.22, 0.18, 0.32), q.y + 0.5);
@@ -57,18 +61,16 @@ fn motif(q: vec2f, id: vec2f, t: f32) -> vec3f {
   // leaf: two circles intersected, rotated 45 degrees
   let r = rot2(0.785 + t) * (q - vec2f(0.04, 0.04));
   let leaf = max(length(r - vec2f(0.0, 0.16)), length(r + vec2f(0.0, 0.16))) - 0.28;
-  let vein = abs(r.y) - 0.008;
   let lc = mix(vec3f(0.25, 0.85, 0.6), vec3f(0.15, 0.6, 0.75), q.x + 0.5);
-  c = mix(c, lc, sdfFill(leaf));
-  c = mix(c, vec3f(0.08, 0.3, 0.3), sdfFill(max(vein, leaf + 0.02)));
+  c = mix(c, lc, fillAA(leaf));
   // a dot in one corner + a little triangle pointing right: breaks the symmetry
-  c = mix(c, vec3f(1.0, 0.75, 0.3), sdfFill(length(q - vec2f(-0.3, -0.3)) - 0.075));
+  c = mix(c, vec3f(1.0, 0.75, 0.3), fillAA(length(q - vec2f(-0.3, -0.3)) - 0.075));
   let tq = q - vec2f(0.32, 0.28);
   let tri = sdEquilateralTriangle(vec2f(tq.y, -tq.x), 0.085);
-  c = mix(c, vec3f(1.0, 0.45, 0.55), sdfFill(tri));
+  c = mix(c, vec3f(1.0, 0.45, 0.55), fillAA(tri));
   // cell border
   let e = 0.5 - max(abs(q.x), abs(q.y));
-  c = mix(c, vec3f(0.0), (1.0 - smoothstep(0.0, fwidth(e) * 1.5, e)) * 0.8);
+  c = mix(c, vec3f(0.0), (1.0 - smoothstep(0.0, clamp(fwidth(e), 0.00001, 0.02) * 1.5, e)) * 0.8);
   return c;
 }
 
@@ -336,12 +338,14 @@ fn exHex(px: vec2f) -> vec3f {
 // the "object" inside the kaleidoscope: drifting pieces of colored glass and sticks on a dark field
 fn beads(p: vec2f, t: f32) -> vec3f {
   let n = fbm(p * 1.2 + vec2f(t * 0.05, -t * 0.03), 3);
-  var c = vec3f(0.02, 0.015, 0.05) + palette(n * 0.6 + t * 0.02, vec3f(0.5, 0.45, 0.55), vec3f(0.4, 0.35, 0.35), vec3f(1.0, 1.0, 1.0), vec3f(0.0, 0.33, 0.67)) * 0.3;
-  for (var i = 0; i < 22; i++) {
+  var c = vec3f(0.02, 0.015, 0.05) + palette(n * 0.6 + t * 0.02, vec3f(0.5, 0.45, 0.55), vec3f(0.4, 0.35, 0.35), vec3f(1.0, 1.0, 1.0), vec3f(0.0, 0.33, 0.67)) * 0.22;
+  // thin colored streaks (like oil between the glass pieces)
+  c += palette(n * 2.0, vec3f(0.5), vec3f(0.5), vec3f(1.0), vec3f(0.1, 0.4, 0.7)) * smoothstep(0.88, 0.97, fract(n * 7.0 + t * 0.05)) * 0.5;
+  for (var i = 0; i < 30; i++) {
     let fi = f32(i);
     let h = hash13(fi + 7.0);
-    let pos = vec2f(sin(t * (0.12 + h.x * 0.25) + fi * 1.7), cos(t * (0.1 + h.y * 0.2) + fi * 2.3)) * (0.35 + 0.6 * h.y);
-    let rad = 0.12 + 0.2 * h.z;
+    let pos = vec2f(sin(t * (0.12 + h.x * 0.25) + fi * 1.7), cos(t * (0.1 + h.y * 0.2) + fi * 2.3)) * (0.12 + 0.8 * h.y);
+    let rad = 0.06 + 0.13 * h.z;
     let q = rot2(t * (h.y - 0.5) * 1.5 + fi) * (p - pos);
     var d = length(q) - rad;
     if (i % 3 == 1) { d = sdEquilateralTriangle(q, rad * 0.9); }

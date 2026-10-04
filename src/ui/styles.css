@@ -940,6 +940,108 @@ select {
   color: #d3d9e6;
   font-size: 14px;
 }
+.hero > *:not(.hero-mosaic) {
+  position: relative;
+}
+.hero-mosaic {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  width: 46%;
+  left: auto;
+  right: -2%;
+  transform: rotate(-6deg) translateY(-6%);
+  opacity: 0.35;
+  pointer-events: none;
+  mask-image: linear-gradient(90deg, transparent, #000 45%);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 45%);
+}
+.hero-mosaic img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 10px;
+}
+.gallery-cat {
+  margin: 26px 0 8px;
+}
+.gallery-cat h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 2px;
+  font-size: 18px;
+}
+.gallery-cat h3 .count {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--faint);
+}
+.gallery-cat > p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.tile {
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  color: var(--text);
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.tile:hover {
+  text-decoration: none;
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: 0 10px 28px #0008;
+}
+.tile-img {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #07090e;
+}
+.tile-img img,
+.tile-ph {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.tile-ph {
+  background: radial-gradient(circle at 30% 30%, #2a335a, #0b0d13);
+}
+.tile-badges {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  display: flex;
+  gap: 4px;
+}
+.tile-badges .mini {
+  background: #000b;
+}
+.tile-t {
+  padding: 8px 10px 0;
+  font-weight: 650;
+  font-size: 14px;
+  line-height: 1.3;
+}
+.tile-b {
+  padding: 3px 10px 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
 .cols3 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -1005,6 +1107,9 @@ select {
   }
 }
 @media (max-width: 860px) {
+  .hero-mosaic {
+    display: none;
+  }
   #app {
     grid-template-columns: minmax(0, 1fr);
   }

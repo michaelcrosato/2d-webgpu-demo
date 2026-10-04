@@ -28,6 +28,18 @@ async function envInfo() {
   return out;
 }
 
+/** A gallery tile: thumbnail (assets/thumbs/<id>.webp) + title + badges. */
+function sceneTile(s) {
+  const a = el('a', { class: 'tile', href: `#/s/${s.id}`, title: s.blurb });
+  const img = el('img', { src: `assets/thumbs/${s.id}.webp`, alt: '', loading: 'lazy', decoding: 'async' });
+  img.addEventListener('error', () => img.replaceWith(el('div', { class: 'tile-ph' })));
+  const badges = el('span', { class: 'tile-badges' });
+  if (s.badges.includes('compute')) badges.append(el('span', { class: 'mini compute' }, 'compute'));
+  if (s.badges.includes('gl2')) badges.append(el('span', { class: 'mini gl2' }, 'gl2'));
+  a.append(el('div', { class: 'tile-img' }, img, badges), el('div', { class: 'tile-t' }, s.title), el('div', { class: 'tile-b' }, s.blurb));
+  return a;
+}
+
 export function renderHome(main) {
   const page = el('div', { class: 'page' });
   const hero = el('section', { class: 'hero' });
@@ -49,6 +61,13 @@ export function renderHome(main) {
     gpuBox.querySelector('small').innerHTML = e.gpu ? `<span class="ok">✓ available</span> — ${e.gpu}` : `<span class="no">✗ unavailable</span> — ${e.gpuErr}. WebGL2 versions will be used where possible.`;
     glBox.querySelector('small').innerHTML = e.gl ? `<span class="ok">✓ available</span> — ${e.gl}` : '<span class="no">✗ unavailable</span>';
   });
+  const mosaic = el('div', { class: 'hero-mosaic', 'aria-hidden': 'true' });
+  for (const id of ['holo-foil', 'gpu-particles', 'crt-retro', 'fluid-sim', 'mode7', 'global-illumination', 'neon-synthwave', 'falling-sand', 'bloom']) {
+    const img = el('img', { src: `assets/thumbs/${id}.webp`, alt: '', loading: 'lazy' });
+    img.addEventListener('error', () => img.remove());
+    mosaic.append(img);
+  }
+  hero.prepend(mosaic);
   page.append(hero);
 
   page.append(el('h2', { class: 'section-title' }, 'How to use this showcase'));
@@ -76,17 +95,15 @@ export function renderHome(main) {
   page.append(cmp);
 
   page.append(el('h2', { class: 'section-title' }, 'Everything in the showcase'));
-  const grid = el('div', { class: 'grid' });
   for (const cat of CATEGORIES) {
     const items = SCENES.filter((s) => s.category === cat.id);
-    const c = el('div', { class: 'catcard' });
-    c.innerHTML = `<h3><span class="dot" style="background:${cat.color}"></span>${cat.title}</h3><p>${cat.blurb}</p>`;
-    const ul = el('ul');
-    for (const s of items) ul.append(el('li', {}, el('a', { href: `#/s/${s.id}`, title: s.blurb }, s.title)));
-    c.append(ul);
-    grid.append(c);
+    const sec = el('section', { class: 'gallery-cat' });
+    sec.innerHTML = `<h3><span class="dot" style="background:${cat.color}"></span>${cat.title}<span class="count">${items.length} scenes</span></h3><p>${cat.blurb}</p>`;
+    const tiles = el('div', { class: 'tiles' });
+    for (const s of items) tiles.append(sceneTile(s));
+    sec.append(tiles);
+    page.append(sec);
   }
-  page.append(grid);
   page.append(
     el('p', { style: 'margin-top:28px;color:var(--muted)' }, 'Looking for words to describe what you want? The ', el('a', { href: '#/guide' }, 'Field Guide'), ' has a glossary and every “ask for it” phrase in one place.'),
   );
