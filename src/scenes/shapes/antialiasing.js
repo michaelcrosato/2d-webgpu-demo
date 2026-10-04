@@ -211,7 +211,7 @@ export default {
       id: 'pixelart',
       label: 'Pixel art scaling',
       kind: 'In a game',
-      hint: 'Magnifiers at the bottom show the hero’s outline.',
+      hint: '',
       note: 'Pixel art at a <b>non-integer</b> zoom and with rotation. <b>Nearest</b> keeps hard texels but some become wider than others and they shimmer when moving. <b>Linear</b> blurs everything. <b>Sharp bilinear</b> keeps texels crisp and only blends the 1-pixel seam between them — the standard trick for smooth-scrolling, freely scaled pixel art.',
       params: { zoom: 5.37 },
     },
@@ -541,7 +541,7 @@ color = textureSample(tex, linearSampler, st / texSize); // blends only at the s
           const ih = Math.min(ph * 0.24, iw);
           inset = [pw * 0.5 - iw / 2, ph * 0.74, iw, ih];
           // look at the hero's back edge (rotated -> diagonal staircase)
-          const ex2 = -0.3 * hs;
+          const ex2 = -0.22 * hs;
           const ey2 = 0.05 * hs;
           src = [hx + Math.cos(rot) * ex2 - Math.sin(rot) * ey2, hy + Math.sin(rot) * ex2 + Math.cos(rot) * ey2];
         }

@@ -236,19 +236,25 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
   col += vec3f(0.6, 0.7, 1.0) * exp(-dm * 14.0) * 0.18 * moonVis;
   col = mix(col, vec3f(0.92, 0.93, 0.85), dn_aa(moon, pw) * moonVis);
   // drifting clouds lit by the sun color / ambient
-  let cn: f32 = fbm(vec2f(q.x * 2.0 + t * 0.01, q.y * 6.0), 4) * 0.5 + 0.5;
-  let cl: f32 = smoothstep(0.55, 0.75, cn) * smoothstep(0.05, 0.2, q.y) * smoothstep(0.5, 0.3, q.y);
-  col = mix(col, amb * 0.85 + u.sunCol * 0.35 * sunUp, cl * 0.75);
+  if (q.y > 0.04 && q.y < 0.52) {
+    let cn: f32 = fbm(vec2f(q.x * 2.0 + t * 0.01, q.y * 6.0), 4) * 0.5 + 0.5;
+    let cl: f32 = smoothstep(0.55, 0.75, cn) * smoothstep(0.05, 0.2, q.y) * smoothstep(0.5, 0.3, q.y);
+    col = mix(col, amb * 0.85 + u.sunCol * 0.35 * sunUp, cl * 0.75);
+  }
 
   // ---- far mountains (hazy, tinted by the horizon)
-  let my: f32 = mountainY(q.x);
-  let mtn: vec3f = mix(u.skyHor * 0.7, vec3f(0.3, 0.33, 0.45) * amb, 0.55);
-  col = mix(col, mtn, dn_aa(my - q.y, pw));
-  if (u.snow > 0.5) { col = mix(col, amb * 0.95, dn_aa(my - q.y, pw) * smoothstep(my + 0.04, my, q.y) * 0.8); }
+  if (q.y > 0.45) {
+    let my: f32 = mountainY(q.x);
+    let mtn: vec3f = mix(u.skyHor * 0.7, vec3f(0.3, 0.33, 0.45) * amb, 0.55);
+    col = mix(col, mtn, dn_aa(my - q.y, pw));
+    if (u.snow > 0.5) { col = mix(col, amb * 0.95, dn_aa(my - q.y, pw) * smoothstep(my + 0.04, my, q.y) * 0.8); }
+  }
   // ---- hills
-  let hy: f32 = hillY(q.x);
-  let hillC: vec3f = mix(u.groundCol * 0.75, vec3f(0.2, 0.25, 0.3), 0.3) * amb;
-  col = mix(col, hillC, dn_aa(hy - q.y, pw));
+  if (q.y > 0.68) {
+    let hy: f32 = hillY(q.x);
+    let hillC: vec3f = mix(u.groundCol * 0.75, vec3f(0.2, 0.25, 0.3), 0.3) * amb;
+    col = mix(col, hillC, dn_aa(hy - q.y, pw));
+  }
 
   // ---- town
   let hs4: vec4f = house(q, pw);
@@ -307,19 +313,26 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
       let fi: f32 = f32(i);
       let lx: f32 = (fi + 0.5) * 0.31 + 0.12;
       let ltop: vec2f = vec2f(lx, 0.93) + vsh * (0.13 / 0.12);
-      shadow = max(shadow, dn_aa(sdSegment(q, vec2f(lx, 0.93), ltop) - 0.003, pw * 3.0));
+      if (q.x > min(lx, ltop.x) - 0.02 && q.x < max(lx, ltop.x) + 0.02) {
+        shadow = max(shadow, dn_aa(sdSegment(q, vec2f(lx, 0.93), ltop) - 0.003, pw * 3.0));
+      }
       let tr: vec3f = treeAt(fi);
       let tb: vec2f = tr.xy;
       let tt: vec2f = tb + vsh * (tr.z / 0.12);
-      shadow = max(shadow, dn_aa(sdSegment(q, tb, tt) - 0.004, pw * 3.0));
-      shadow = max(shadow, dn_aa(sdEllipseApprox(q - mix(tb, tt, 0.75), vec2f(0.035 + length(vsh) * 0.15, 0.012)), pw * 6.0));
+      if (q.x > min(tb.x, tt.x) - 0.08 && q.x < max(tb.x, tt.x) + 0.08) {
+        shadow = max(shadow, dn_aa(sdSegment(q, tb, tt) - 0.004, pw * 3.0));
+        shadow = max(shadow, dn_aa(sdEllipseApprox(q - mix(tb, tt, 0.75), vec2f(0.035 + length(vsh) * 0.15, 0.012)), pw * 6.0));
+      }
     }
     lit = mix(lit, lit * (1.0 - 0.65 * u.shadows) * vec3f(0.85, 0.9, 1.1), shadow * sunUp * u.shadows);
     // pools of lamp light at night
-    for (var i = 0; i < 8; i++) {
-      let lx: f32 = (f32(i) + 0.5) * 0.31 + 0.12;
-      let d: f32 = length((q - vec2f(lx, 0.93)) * vec2f(1.0, 3.2));
-      lit += g * u.lampColor * exp(-d * 18.0) * 1.4 * nightK;
+    if (nightK > 0.0) {
+      for (var i = 0; i < 8; i++) {
+        let lx: f32 = (f32(i) + 0.5) * 0.31 + 0.12;
+        if (abs(q.x - lx) > 0.3) { continue; }
+        let d: f32 = length((q - vec2f(lx, 0.93)) * vec2f(1.0, 3.2));
+        lit += g * u.lampColor * exp(-d * 18.0) * 1.4 * nightK;
+      }
     }
     col = mix(col, lit, dn_aa(BASE - q.y, pw));
   }
@@ -328,6 +341,7 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
   for (var i = 0; i < 8; i++) {
     let fi: f32 = f32(i);
     let tr: vec3f = treeAt(fi);
+    if (abs(q.x - tr.x) > tr.z * 0.6 || q.y > tr.y + 0.01 || q.y < tr.y - tr.z * 1.3) { continue; }
     let trunk: f32 = sdSegment(q, tr.xy, tr.xy - vec2f(0.0, tr.z * 0.6)) - 0.005;
     col = mix(col, vec3f(0.25, 0.17, 0.12) * amb, dn_aa(trunk, pw));
     let cc: vec2f = tr.xy - vec2f(0.0, tr.z * 0.75);
@@ -345,6 +359,7 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
   }
   for (var i = 0; i < 8; i++) {
     let lx: f32 = (f32(i) + 0.5) * 0.31 + 0.12;
+    if (abs(q.x - lx) > 0.1 || q.y < 0.7 || q.y > 0.95) { continue; }
     let pole: f32 = sdSegment(q, vec2f(lx, 0.93), vec2f(lx, 0.8)) - 0.0025;
     col = mix(col, vec3f(0.12, 0.13, 0.16) * (amb + 0.2), dn_aa(pole, pw));
     let head: f32 = sdBox(q - vec2f(lx, 0.795), vec2f(0.007, 0.01));

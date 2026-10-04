@@ -101,7 +101,7 @@ const examples = [
     label: 'Galaxy collision',
     kind: 'Real life',
     note: 'Two rotating disk galaxies, each with a heavy core, fall into each other. Gravity tears long <b>tidal tails</b> out of them — exactly what we see in real galaxy mergers (the Antennae, the Mice). Every star pulls on every other star.',
-    params: { soft: 0.02, speed: 1, colorMode: 'origin', size: 1.6 },
+    params: { soft: 0.02, speed: 1, colorMode: 'origin', size: 1.6, count: 16384 },
   },
   {
     id: 'solar',
@@ -115,7 +115,7 @@ const examples = [
     label: 'Dust cloud collapse',
     kind: 'Abstract',
     note: 'A slowly spinning cloud of equal-mass particles collapses under its own gravity into filaments and clumps — the way stars and galaxies form. Lower the softening for sharper, more violent clumping.',
-    params: { soft: 0.012, speed: 1, colorMode: 'speed', size: 1.5 },
+    params: { soft: 0.012, speed: 1, colorMode: 'speed', size: 1.5, count: 16384 },
   },
 ];
 
