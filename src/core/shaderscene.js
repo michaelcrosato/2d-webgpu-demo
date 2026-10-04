@@ -73,7 +73,7 @@ function writeBuiltins(block, ctx) {
 function resolveSize(pass, ctx) {
   if (typeof pass.size === 'function') return pass.size(ctx.params, ctx);
   if (Array.isArray(pass.size)) return pass.size;
-  const s = typeof pass.scale === 'function' ? pass.scale(ctx.params) : pass.scale ?? 1;
+  const s = typeof pass.scale === 'function' ? pass.scale(ctx.params, ctx) : pass.scale ?? 1;
   return [Math.max(1, Math.round(ctx.width * s)), Math.max(1, Math.round(ctx.height * s))];
 }
 

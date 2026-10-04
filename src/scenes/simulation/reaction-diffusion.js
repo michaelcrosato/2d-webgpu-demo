@@ -121,7 +121,6 @@ fn levelSDF(uv: vec2f, res: vec2f) -> f32 {
 `;
 
 let lastPreset = null;
-let lastAnimal = null;
 let isTest = false;
 let hoverTag = null;
 let hoverCtx = null;
@@ -194,7 +193,6 @@ export default shaderScene({
       out.kill = a[1];
       aniso = a[2];
       out.dB = a[3];
-      if (params.animal !== lastAnimal) lastAnimal = params.animal;
     }
     out.aniso = aniso;
     out.erase = ctx.pointer.down && ctx.pointer.button === 2 ? 1 : 0;
