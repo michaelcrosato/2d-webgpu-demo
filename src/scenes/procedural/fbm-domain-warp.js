@@ -187,7 +187,7 @@ fn warpPattern(p: vec2f, t: f32, stage: f32, k: f32) -> Warp {
 }
 
 fn warpColor(w: Warp) -> vec3f {
-  let f = clamp(0.5 + w.f * 1.1, 0.0, 1.0);
+  let f = clamp(0.5 + w.f * 0.85, 0.0, 1.0);
   var col = mix(vec3f(0.1, 0.62, 0.67), vec3f(0.67, 0.67, 0.5), clamp(f * f * 4.0, 0.0, 1.0));
   col = mix(col, vec3f(0.0, 0.0, 0.16), clamp(length(w.q) * 1.1, 0.0, 1.0));
   col = mix(col, vec3f(0.67, 1.0, 1.0), clamp(abs(w.r.x) * 1.4, 0.0, 1.0));
@@ -505,7 +505,7 @@ export default shaderScene({
       label: 'Domain warping',
       kind: 'Abstract',
       note: 'Instead of <code>f(p)</code>, evaluate <code>f(p + offset)</code> where the offset itself comes from noise. Doing it twice gives Inigo Quilez’s famous <code>f(p + f(p + f(p)))</code>: flowing, marbled, smoke-like shapes. Turn on the arrows to see where each point looks up its value.',
-      params: { scale: 1.2, octaves: 4, warp: 3.5 },
+      params: { scale: 1.2, octaves: 4, warp: 3 },
       hint: '',
     },
     {

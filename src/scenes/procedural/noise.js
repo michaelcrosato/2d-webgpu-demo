@@ -254,12 +254,12 @@ fn marble(lp: vec2f, sc: f32, off: vec2f, oct: i32) -> vec3f {
   // big smooth swirls (fBm) + small crinkles (turbulence) bend a simple sine wave
   let w1 = fbm(p * 0.6, 3);
   let tb = turb(p * 1.3, min(oct, 4));
-  let phase = (p.x * 0.8 + p.y * 0.45) * 2.6 + u.warp * (2.4 * w1 + 1.0 * tb);
+  let phase = (p.x * 0.8 + p.y * 0.45) * 4.0 + u.warp * (2.4 * w1 + 1.0 * tb);
   let band = 0.5 + 0.5 * sin(phase);
   let cloud = fbm(p * 1.3 + 3.0, oct) * 0.5 + 0.5;
   var c = mix(vec3f(0.95, 0.94, 0.92), vec3f(0.8, 0.81, 0.84), smoothstep(0.4, 1.0, band) * 0.7 + cloud * 0.25);
   // main veins: dark core with a soft grey halo
-  let v = abs(sin(phase * 0.5 + 0.4));
+  let v = abs(sin(phase * 0.75 + 0.4));
   c = mix(c, vec3f(0.58, 0.59, 0.65), (1.0 - smoothstep(0.0, 0.3, v)) * 0.5);
   c = mix(c, vec3f(0.27, 0.28, 0.34), 1.0 - smoothstep(0.015, 0.06, v));
   // a few thin golden secondary veins

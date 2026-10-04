@@ -291,6 +291,7 @@ export default shaderScene({
     { type: 'button', key: 'flySeahorse', label: 'Fly: Seahorse valley', showFor: ['mandelbrot'] },
     { type: 'button', key: 'flyMini', label: 'Fly: mini-Mandelbrot', showFor: ['mandelbrot'] },
     { type: 'button', key: 'flyDeep', label: 'Fly: precision limit', showFor: ['mandelbrot'] },
+    { type: 'button', key: 'flyShip', label: 'Fly: the little ship', showFor: ['ship'] },
   ],
   uniforms: {
     maxIter: 'f32', pal: 'f32', density: 'f32', cycle: 'f32', orbit: 'f32', degree: 'f32', relax: 'f32', aa: 'f32',
@@ -305,6 +306,7 @@ export default shaderScene({
     if (key === 'flySeahorse') pz.flyTo(-0.7453, -0.1127, 120);
     if (key === 'flyMini') pz.flyTo(-1.7548, 0, 22);
     if (key === 'flyDeep') pz.flyTo(-0.743643887, -0.131825904, 120000);
+    if (key === 'flyShip') pz.flyTo(-1.762, -0.035, 12);
   },
   bind(params, ctx) {
     const ex = ctx.example;
