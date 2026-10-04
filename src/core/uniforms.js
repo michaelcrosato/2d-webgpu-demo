@@ -33,7 +33,7 @@ export const RESERVED_NAMES = new Set(
     'texture sampler alias private function workgroup storage handle ' +
     'auto demote extern final friend impl macro mutable operator protected public register super throw try typedef ' +
     'typename unless unsized virtual where with yield async await become catch crate debugger decltype explicit ' +
-    'extends finally goto inline interface nil null nullptr typeof unsafe using volatile'
+    'extends finally goto inline interface nil null nullptr typeof unsafe using volatile patch'
   ).split(' '),
 );
 

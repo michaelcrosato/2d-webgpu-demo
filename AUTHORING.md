@@ -86,7 +86,7 @@ The **instance** returned by `init` may implement:
 | `paused` | true when paused — **do not advance simulations**; `frame()` is still called when params change so the view updates |
 | `testMode` | true under the headless test harness — use it to shrink heavy workloads (e.g. 50k particles instead of 2M) |
 | `encoder`, `target`, `targetTexture` | WebGPU per-frame: the command encoder (submitted for you) and the canvas texture view |
-| `overlay` | a `<div>` over the canvas for live readouts. Add children with class `tag` and absolute position. Keep clear of the bottom-left (hint chip) and top-right (toolbar): e.g. `style.cssText = 'right:8px;bottom:8px'` |
+| `overlay` | a `<div>` over the canvas for live readouts. The canvas corners are taken: fps/API/size chips top-left, toolbar top-right, hint chip bottom-left. Add children with class `tag` and absolute position. Keep clear of the bottom-left (hint chip) and top-right (toolbar): e.g. `style.cssText = 'right:8px;bottom:8px'` |
 | `status(text)` | show a toast |
 
 Coordinates everywhere: **origin top-left, y down**, in device pixels unless noted.
@@ -109,7 +109,9 @@ export default shaderScene({
   passes: [                 // optional Shadertoy-style buffers (see below)
     { name: 'state', format: 'rgba16float', size: [256, 256], iterations: 'steps', code: `fn shade(uv: vec2f, px: vec2f) -> vec4f { … }` },
   ],
-  bind(params, ctx) { return { mode: params.kind === 'x' ? 1 : 0 }; }, // optional: extra/derived uniform values, JS state
+  bind(params, ctx) { return { mode: params.kind === 'x' ? 1 : 0 }; }, // optional: extra/derived uniform values, JS state.
+                                                                        // Runs every frame with the full ctx (pointer, overlay, status…)
+  onAction(key, ctx) {},    // optional: button presses (the ↻ toolbar button also sends 'reset', which clears the pass buffers)
   resetOn: ['seed'],        // optional: param keys that clear the pass buffers
   renderScale: 'pixelSize', // optional: number | param key | (params) => number. Final image rendered smaller and nearest-upscaled
   gl: false,                // optional: set if the scene can't be translated (WebGPU only)
@@ -158,7 +160,7 @@ The WGSL is translated to GLSL ES 3.00 by `src/core/wgsl2glsl.js`. Stay inside t
 4. Textures only via the `TEX/TEXR/TEXN/LOAD/LOADW/TEXSIZE` helpers.
 5. Don't name variables/functions after GLSL keywords or built-ins: `input output sample filter texture mod mix step
    smooth active common buffer shared half fixed cross dot length distance normalize reflect sign round floor fract
-   target set get type` … (also WGSL reserved words like `target`, `filter`, `mod`, `set`, `get`, `type`, `match`, `self`, `pass`, `ref`, `of`).
+   target set get type` … (also WGSL reserved words like `target`, `filter`, `mod`, `set`, `get`, `type`, `match`, `self`, `pass`, `ref`, `of`, `patch`, `auto`).
 6. `let x = expr;` types are inferred in most cases; if the translator can't, the overlay shows
    `cannot infer the type of "x"` — add an explicit type: `let x: vec2f = …`.
 7. Arrays: `var a = array<f32, 4>(1.0, 2.0, 3.0, 4.0);` (indexing with a variable requires `var`, not `let`).
@@ -285,7 +287,7 @@ frame(ctx) {
 All written in portable WGSL (usable from both `program()`/`fullscreen()` and `shaderScene()`).
 
 - **math**: `rot2(a) -> mat2x2f` (`rot2(a) * p`), `remap(x,a,b,c,d)`, `remap01(x,a,b)`, `centerUV(px, res)` (centered, aspect-correct, y in −0.5..0.5, y down), `easeInOut`, `easeOutBack`, `easeOutElastic`.
-- **hash**: `hash11 hash12 hash13 hash21 hash22 hash23 hash31 hash33` (hashNM: N floats in → M out, [0,1)), `pcg(u32)`, `pcg3d(vec3u)`, `ign(px)` (interleaved gradient noise for dithering).
+- **hash** (also home of `ign()` — include `hash` if you use it): `hash11 hash12 hash13 hash21 hash22 hash23 hash31 hash33` (hashNM: N floats in → M out, [0,1)), `pcg(u32)`, `pcg3d(vec3u)`, `ign(px)` (interleaved gradient noise for dithering).
 - **noise** (needs hash, math — auto): `valueNoise(p)` [0,1], `perlin(p)` / `simplex(p)` / `perlin3(p3)` ~[−1,1], `fbm(p, octaves)`, `fbmEx(p, oct, lacunarity, gain)`, `fbm3(p3, oct)`, `ridged(p, oct)`,
   `voronoi(p) -> vec4f(F1, F2, cellId.xy)`, `voronoiEx(p, jitter, t)`, `voronoiBorder(p, jitter, t) -> vec3f(borderDist, cellId)`, `curl(p) -> vec2f`.
 - **sdf**: `sdCircle sdBox sdRoundBox sdSegment sdTriangle sdEquilateralTriangle sdHexagon sdStar5 sdHeart sdRhombus sdArc sdPie sdVesica sdMoon sdCross sdEllipseApprox sdBezier`,

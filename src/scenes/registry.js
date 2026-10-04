@@ -83,10 +83,10 @@ export const SCENES = [
 
   // ---------------------------------------------------------------- procedural
   S('procedural', 'noise', 'Noise: Value, Perlin, Simplex & Worley', 'The random-but-smooth functions behind clouds, terrain, fire and water.', ['gl2'], () => import('./procedural/noise.js')),
-  S('procedural', 'fbm-domain-warp', 'fBm & Domain Warping', 'Layer noise for detail, then bend space with noise: clouds, marble, gas giants.', ['gl2'], () => import('./procedural/fbm-domain-warp.js')),
+  S('procedural', 'fbm-domain-warp', 'fBm & Domain Warping', 'Layer noise for detail, then bend space with noise: clouds, marble, gas giants.', ['gl2', 'interactive'], () => import('./procedural/fbm-domain-warp.js')),
   S('procedural', 'voronoi', 'Voronoi & Cellular Patterns', 'Cells, cracks, stained glass, scales and territory maps.', ['gl2', 'interactive'], () => import('./procedural/voronoi.js')),
   S('procedural', 'terrain-gen', 'World & Terrain Generation', 'Islands, biomes, caves and heightmaps generated from noise.', ['gl2', 'interactive'], () => import('./procedural/terrain-gen.js')),
-  S('procedural', 'patterns-tiling', 'Patterns, Tiling & Truchet', 'Repetition, hex grids, truchet tiles and kaleidoscopes.', ['gl2'], () => import('./procedural/patterns-tiling.js')),
+  S('procedural', 'patterns-tiling', 'Patterns, Tiling & Truchet', 'Repetition, hex grids, truchet tiles and kaleidoscopes.', ['gl2', 'interactive'], () => import('./procedural/patterns-tiling.js')),
   S('procedural', 'fractals', 'Fractals: Mandelbrot & Julia', 'Infinite detail from z = z² + c. Zoom in forever.', ['gl2', 'interactive'], () => import('./procedural/fractals.js')),
 
   // ---------------------------------------------------------------- sprites
