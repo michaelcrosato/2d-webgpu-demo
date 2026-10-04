@@ -244,7 +244,7 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
 }`;
 
 export default shaderScene({
-  interaction: 'Hover: a lens shows the original (filter) or the mouse lights the triangles (abstract).',
+  interaction: 'Hover to compare with the original (filter) or to light the triangles (abstract).',
   examples: [
     {
       id: 'filter',

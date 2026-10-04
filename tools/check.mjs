@@ -110,7 +110,7 @@ for (const s of targets) {
       let stats = null;
       const t0 = Date.now();
       try {
-        await page.goto(url);
+        await page.goto(url, { timeout });
         await page.waitForFunction(() => window.__showcase?.ready && window.__showcase.backend, null, { timeout });
         const box = await page.locator('.stage-canvas').boundingBox();
         if (box) {

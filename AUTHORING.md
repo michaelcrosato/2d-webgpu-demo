@@ -290,6 +290,7 @@ All written in portable WGSL (usable from both `program()`/`fullscreen()` and `s
   `voronoi(p) -> vec4f(F1, F2, cellId.xy)`, `voronoiEx(p, jitter, t)`, `voronoiBorder(p, jitter, t) -> vec3f(borderDist, cellId)`, `curl(p) -> vec2f`.
 - **sdf**: `sdCircle sdBox sdRoundBox sdSegment sdTriangle sdEquilateralTriangle sdHexagon sdStar5 sdHeart sdRhombus sdArc sdPie sdVesica sdMoon sdCross sdEllipseApprox sdBezier`,
   `opSmoothUnion opSmoothSubtract opSmoothIntersect opOnion`, `sdfFill(d)` (AA coverage), `sdfStroke(d, width)`, `sdfGlow(d, radius)`.
+  Note: a few shapes come from y-up references — `sdArc`/`sdPie` open toward the top of the screen and `sdEquilateralTriangle` points down; flip `p.y` if you need the other orientation.
 - **color**: `luma hsv2rgb rgb2hsv srgbToLinear linearToSrgb linearToOklab oklabToLinear mixOklab palette(t,a,b,c,d) rainbow tonemapACES tonemapReinhard adjustSaturation adjustContrast hueRotate blendScreen blendOverlay blendSoftLight`.
 - **dither**: `bayer2 bayer4 bayer8 bayer16` (pass pixel coords, returns threshold in [0,1)).
 
