@@ -76,9 +76,10 @@ fn exIsland(px: vec2f) -> vec3f {
     col *= clamp(0.45 + 0.75 * dot(n, L), 0.3, 1.35);
     // rivers: zero-crossings of another noise, narrowing toward the mountains
     if (u.rivers > 0.5) {
-      let rn = abs(fbm(w * 1.8 + vec2f(40.0 + u.seed, 3.0), 5));
-      let rw = 0.022 * (1.0 - smoothstep(0.0, 0.42, h)) + 0.002;
-      let riv = (1.0 - smoothstep(rw * 0.55, rw, rn)) * (1.0 - smoothstep(0.38, 0.44, h));
+      let rn = abs(fbm(w * 1.3 + vec2f(40.0 + u.seed, 3.0), 5));
+      let rw = 0.016 * (1.0 - smoothstep(0.0, 0.42, h)) + 0.002;
+      let keep = smoothstep(-0.05, 0.1, fbm(w * 0.9 + vec2f(7.0, 70.0 + u.seed), 3));
+      let riv = (1.0 - smoothstep(rw * 0.55, rw, rn)) * (1.0 - smoothstep(0.36, 0.42, h)) * keep;
       col = mix(col, vec3f(0.2, 0.48, 0.66), riv);
     }
     // trees: a jittered grid of round canopies in forest biomes (only when big enough to see)
@@ -146,8 +147,8 @@ fn caveMat(c: vec2f, T: f32) -> f32 {
   let n1 = fbm(c * vec2f(2.6, 3.8) + k, 4);
   let n2 = fbm(c * 1.5 + k + vec2f(7.0, 3.0), 4);
   let deep = smoothstep(0.05, 0.6, depth);
-  let tunnel = abs(n1) < u.caveAmt * 0.06 * (0.4 + 0.6 * deep);
-  let cavern = n2 > 0.36 - u.caveAmt * 0.22 * deep;
+  let tunnel = abs(n1) < u.caveAmt * 0.075 * (0.4 + 0.6 * deep);
+  let cavern = n2 > 0.34 - u.caveAmt * 0.24 * deep;
   if (depth > T * 2.5 && (tunnel || cavern)) {
     if (depth > 1.35 && n2 > 0.42 - u.caveAmt * 0.22 && fract(c.y * 2.0) > 0.0 && n1 > 0.0) { return 10.0; }
     return 1.0;
@@ -156,7 +157,7 @@ fn caveMat(c: vec2f, T: f32) -> f32 {
   var m = 4.0;
   if (depth < dirtDepth) {
     m = 3.0;
-    if (depth < T && sy > 0.02) { m = 11.0; }
+    if (depth < T && sy > 0.13) { m = 11.0; }
     else if (depth < T) { m = 2.0; }
   } else if (depth > 0.95 + 0.1 * n1) { m = 5.0; }
   // ores: small clumps from high-frequency value noise, depth-dependent
@@ -239,9 +240,9 @@ fn exCaves(px: vec2f) -> vec3f {
   }
   // lighting: daylight fades with depth; the mouse is your torch; lava glows
   if (m > 0.5) {
-    let day = mix(1.0, 0.07, smoothstep(0.03, 0.35, depth));
-    let dm = length(w - mw) / (0.13 * sqrt(u.view.w));
-    let torch = 1.3 / (1.0 + dm * dm * 3.0) * u.mouse.w;
+    let day = mix(1.0, 0.3, smoothstep(0.03, 0.45, depth));
+    let dm = length(w - mw) / (0.16 / sqrt(u.view.w));
+    let torch = 1.4 / (1.0 + dm * dm * 3.0) * u.mouse.w;
     let deepGlow = vec3f(1.0, 0.4, 0.1) * smoothstep(1.2, 1.6, depth) * 0.25;
     var light = vec3f(day) + vec3f(1.0, 0.78, 0.5) * torch + deepGlow;
     if (m > 9.5 && m < 10.5) { light = vec3f(1.0); }
@@ -257,10 +258,10 @@ fn exCaves(px: vec2f) -> vec3f {
 // ================================================================== shaded relief
 fn reliefHeight(w: vec2f) -> f32 {
   let oc = clamp(i32(u.detail + log2(max(u.view.w / 0.55, 1.0))), 2, 11);
-  let q = w * 1.1 + vec2f(u.seed * 13.7, u.seed * 7.3);
+  let q = w * 0.75 + vec2f(u.seed * 13.7, u.seed * 7.3);
   let r = ridged(q * 0.7, oc);
-  let f = fbm(q * 1.3 + 4.0, oc);
-  return r * 0.85 + f * 0.4 - 0.05;
+  let f = fbmEx(q * 1.1 + 4.0, oc, 2.0, 0.42);
+  return r * 0.95 + f * 0.45 - 0.08;
 }
 
 fn hypso(h: f32) -> vec3f {
@@ -348,7 +349,7 @@ export default shaderScene({
       label: 'Shaded relief map',
       kind: 'Real life',
       note: 'How real topographic maps are drawn: <b>hypsometric tint</b> (color by elevation), <b>hillshading</b> (Lambert lighting of the slope, light from the north-west by convention) and <b>contour lines</b> (every interval, every 5th one bold), all from one height function — here ridged noise + fBm.',
-      params: { detail: 7 },
+      params: { detail: 5, interval: 0.035, exag: 4 },
     },
   ],
   controls: [

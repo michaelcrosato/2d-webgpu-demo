@@ -835,7 +835,7 @@ const controls = [
 ];
 
 export default {
-  interaction: 'Drag to grab & swing. Right-drag to cut. (Reset with ↻)',
+  interaction: 'Drag to grab & swing. Right-drag to cut.',
   examples,
   controls,
   reinitOnExample: true,
@@ -1189,7 +1189,7 @@ pts[c.b].p = vec4f(B.xyz - corr * (B.w / w), B.w);  // color touches these point
         rp.end();
 
         const disp = nSub * iters * world.nColors;
-        readout.textContent = `${world.nPts.toLocaleString()} points · ${world.nCons.toLocaleString()} links in ${world.nColors} colors → ${disp} solve dispatches/frame`;
+        readout.textContent = `${world.nPts.toLocaleString()} pts · ${world.nCons.toLocaleString()} links · ${world.nColors} colors → ${disp} dispatches`;
       },
     };
   },

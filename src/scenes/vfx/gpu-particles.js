@@ -9,7 +9,7 @@
 
 import { createGameScene } from '../../core/gamescene.js';
 import { Camera2D, ShapeBatch } from '../../core/batch.js';
-import { makeStrip, createBloom, TONEMAP_WGSL, tag, hexLin, prng, hsv, TEX } from './_shared.js';
+import { makeStrip, createBloom, TONEMAP_WGSL, tag, hexLin, prng, TEX } from './_shared.js';
 
 const STRUCTS = /* wgsl */ `
 struct Particle {

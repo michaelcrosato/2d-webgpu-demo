@@ -195,6 +195,34 @@ export function makeSplit(initial = 0.5) {
   };
 }
 
+// ------------------------------------------------------------------------ value-noise texture
+let noiseCanvas = null;
+/**
+ * 256×256 tiling white noise (independent R, G, B, A). Sampled with linear filtering + repeat
+ * (TEXR(t, p / 256.0)) it IS value noise with lattice spacing 1 — one texture fetch instead of
+ * four hash evaluations. Declare it with { filter: 'linear', wrap: 'repeat' }.
+ */
+export function noiseTexture() {
+  if (noiseCanvas) return noiseCanvas;
+  const N = 256;
+  const c = makeCanvas(N, N);
+  const g = c.getContext('2d');
+  const img = g.createImageData(N, N);
+  const r = rng(99);
+  for (let i = 0; i < img.data.length; i++) img.data[i] = (r() * 256) | 0;
+  for (let i = 3; i < img.data.length; i += 4) img.data[i] = 255; // keep alpha opaque (premultiplication-safe)
+  g.putImageData(img, 0, 0);
+  noiseCanvas = c;
+  return c;
+}
+export const NOISE_TEX_WGSL = /* wgsl */ `
+fn tnoise(p: vec2f) -> f32 { return TEXR(noiseTex, (p + vec2f(0.5)) / 256.0).r; }
+fn tnoise3(p: vec2f) -> vec3f { return TEXR(noiseTex, (p + vec2f(0.5)) / 256.0).rgb; }
+fn tfbm(p: vec2f) -> f32 {
+  return (tnoise(p) * 0.5 + tnoise(p * 2.03 + vec2f(17.0, 9.0)) * 0.3 + tnoise(p * 4.01 + vec2f(3.0, 41.0)) * 0.2) * 2.0 - 1.0;
+}
+`;
+
 // ------------------------------------------------------------------------- blue noise (CPU)
 
 let blueNoiseCanvas = null;

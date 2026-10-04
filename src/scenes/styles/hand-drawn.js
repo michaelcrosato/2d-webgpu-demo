@@ -122,13 +122,22 @@ fn boilScene(px: vec2f) -> vec3f {
     let starC = vec2f(0.3, -0.13 - bob * 0.6);
     let dStar = sdStar5(rot2(0.1 * sin(ts * 1.5)) * (p - starC), 0.13, 0.45) * res.y;
     let dHeart = sdHeartAt(p, vec2f(0.28, 0.22), 0.13) * res.y;
-    // a swirl of motion lines
-    let ml = min(sdSegment(p, vec2f(-0.5, -0.12), vec2f(-0.44, -0.12)), sdSegment(p, vec2f(-0.52, -0.06), vec2f(-0.45, -0.06))) * res.y;
+    // motion lines, a little cloud and a ground line
+    var ml = min(sdSegment(p, vec2f(-0.5, -0.12), vec2f(-0.44, -0.12)), sdSegment(p, vec2f(-0.52, -0.06), vec2f(-0.45, -0.06)));
+    let cl = vec2f(-0.02, -0.3);
+    var cloud = min(sdCircle(p - cl, 0.045), sdCircle(p - cl - vec2f(0.05, 0.012), 0.035));
+    cloud = min(cloud, min(sdCircle(p - cl - vec2f(-0.05, 0.015), 0.03), sdBox(p - cl - vec2f(0.0, 0.03), vec2f(0.07, 0.015))));
+    ml = min(ml, abs(cloud));
+    ml = min(ml, sdSegment(p, vec2f(-0.62, 0.3), vec2f(0.55, 0.3)));
+    ml = ml * res.y;
     if (tr == 0) {
       // fills only once (with the first tracing)
       col = mix(col, vec3f(0.55, 0.78, 0.95), crayon(1.0 - smoothstep(-1.0, 1.0, dBlob + 3.0), px, 0.5) * 0.9);
       col = mix(col, vec3f(1.0, 0.8, 0.2), crayon(1.0 - smoothstep(-1.0, 1.0, dStar + 3.0), px, -0.4) * 0.95);
       col = mix(col, vec3f(0.85, 0.15, 0.2), hatch(0.35 + 0.65 * u.hatch, px, 7.0 * res.y / 900.0, 1.4) * (1.0 - smoothstep(-1.0, 1.0, dHeart + 2.0)));
+      // a scribbled shadow under the blob
+      let shd = sdEllipseApprox(p - vec2f(bc.x, 0.3), vec2f(0.17 - bob, 0.025));
+      col = mix(col, vec3f(0.45, 0.42, 0.45), hatch(0.9, px, 4.0 * res.y / 900.0, 1.1) * (1.0 - smoothstep(-0.002, 0.002, shd)) * 0.7);
       // cheeks
       let ck = min(length(p - bc - vec2f(-0.085, 0.0)), length(p - bc - vec2f(0.085, 0.0))) - 0.025;
       col = mix(col, vec3f(0.98, 0.5, 0.55), crayon(1.0 - smoothstep(-0.002, 0.002, ck), px, 0.2) * 0.6);
@@ -143,7 +152,9 @@ fn boilScene(px: vec2f) -> vec3f {
       col = mix(col, ink, 1.0 - smoothstep(-0.5, 0.5, eyes * res.y));
       let hl = min(length(p - bc - vec2f(-0.042, -0.06)), length(p - bc - vec2f(0.058, -0.06))) - 0.007;
       col = mix(col, vec3f(1.0), 1.0 - smoothstep(-0.5, 0.5, hl * res.y));
-      let smile = sdArc(p - bc - vec2f(0.0, 0.0), vec2f(sin(0.9), cos(0.9)), 0.05, 0.0) * res.y;
+      // sdArc opens toward screen-up in our y-down space, so flip y for a smile
+      let sq = p - bc - vec2f(0.0, -0.02);
+      let smile = sdArc(vec2f(sq.x, -sq.y), vec2f(sin(0.9), cos(0.9)), 0.05, 0.0) * res.y;
       col = mix(col, ink, pencil(smile, lw, px));
     }
   }
@@ -215,7 +226,8 @@ fn notebook(px: vec2f) -> vec3f {
     let ray = abs(fract(sa / TAU * 10.0 + ts * 0.1) - 0.5);
     d = min(d, max(ray * length(p - sc) * 0.6, abs(length(p - sc) - 0.095) - 0.018));
     d = min(d, min(length(p - sc - vec2f(-0.02, -0.012)), length(p - sc - vec2f(0.02, -0.012))) - 0.004);
-    d = min(d, abs(sdArc(p - sc - vec2f(0.0, 0.0), vec2f(sin(0.8), cos(0.8)), 0.032, 0.0)));
+    let sq = p - sc - vec2f(0.0, -0.005);
+    d = min(d, abs(sdArc(vec2f(sq.x, -sq.y), vec2f(sin(0.8), cos(0.8)), 0.032, 0.0)));
     // stars, a spiral, a cube and a dashed flight path
     for (var k = 0; k < 6; k++) {
       let hk = hash12(f32(k) * 7.1 + 2.0);

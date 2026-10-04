@@ -127,6 +127,8 @@ export default shaderScene({
     hourNow: 'f32',
   },
   include: ['noise', 'sdf', 'color'],
+  // the software GPU of the test harness is slow: render at half resolution there only
+  renderScale: () => (/[?&]test=1/.test(location.href) ? 0.35 : 1),
   bind(params, ctx) {
     const se = SEASONS[params.season] || SEASONS.summer;
     if (!state || state.base !== params.hour) state = { base: params.hour, elapsed: 0 };
@@ -168,7 +170,7 @@ export default shaderScene({
   },
   code: /* wgsl */ `
 fn dn_aa(d: f32, w: f32) -> f32 { return clamp(0.5 - d / w, 0.0, 1.0); }
-fn mountainY(x: f32) -> f32 { return 0.6 - 0.12 * ridged(vec2f(x * 1.3, 4.1), 4); }
+fn mountainY(x: f32) -> f32 { return 0.6 - 0.12 * ridged(vec2f(x * 1.3, 4.1), 3); }
 fn hillY(x: f32) -> f32 { return 0.72 + 0.025 * sin(x * 3.1) + 0.015 * perlin(vec2f(x * 4.0, 7.0)); }
 
 // houses: one per cell along x, standing on the town baseline
@@ -205,11 +207,12 @@ fn treeAt(i: f32) -> vec3f {
   return vec3f((i + 0.35 + 0.3 * h.x) * 0.31, 0.915 + 0.02 * h.y, 0.11 + 0.06 * h.z);
 }
 
-fn shade(uv: vec2f, px: vec2f) -> vec4f {
+fn shade(uv: vec2f, tpx: vec2f) -> vec4f {
+  let px: vec2f = uv * u.resolution;               // canvas pixels (the render target may be smaller)
   let H: f32 = u.resolution.y;
   let A: f32 = u.resolution.x / H;
   let q: vec2f = px / H;
-  let pw: f32 = 1.5 / H;
+  let pw: f32 = max(1.5 / H, length(fwidth(q)));
   let t: f32 = u.time;
   let amb: vec3f = u.ambient;
   let sunUp: f32 = smoothstep(-0.03, 0.12, u.sunElev);
@@ -237,7 +240,7 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
   col = mix(col, vec3f(0.92, 0.93, 0.85), dn_aa(moon, pw) * moonVis);
   // drifting clouds lit by the sun color / ambient
   if (q.y > 0.04 && q.y < 0.52) {
-    let cn: f32 = fbm(vec2f(q.x * 2.0 + t * 0.01, q.y * 6.0), 4) * 0.5 + 0.5;
+    let cn: f32 = fbm(vec2f(q.x * 2.0 + t * 0.01, q.y * 6.0), 3) * 0.5 + 0.5;
     let cl: f32 = smoothstep(0.55, 0.75, cn) * smoothstep(0.05, 0.2, q.y) * smoothstep(0.5, 0.3, q.y);
     col = mix(col, amb * 0.85 + u.sunCol * 0.35 * sunUp, cl * 0.75);
   }

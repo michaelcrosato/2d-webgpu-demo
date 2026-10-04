@@ -609,6 +609,13 @@ sprites.flush(encoder, target, cam, { extra: [time, edgeWidth, noiseScale, pixel
       onExample() {
         slimes.length = 0;
       },
+      onAction(key) {
+        if (key === 'reset') {
+          slimes.length = 0;
+          freeze = 0;
+          lastInput = -99;
+        }
+      },
       frame(ctx) {
         shapes.begin(); // once per frame; each flush draws what was added since the previous one
         sprites.begin();

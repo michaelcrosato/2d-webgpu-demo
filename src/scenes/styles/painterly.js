@@ -1,5 +1,5 @@
 import { shaderScene } from '../../core/shaderscene.js';
-import { setTag, placeTag, makeSplit, gamePass, GAME_INCLUDES } from './_shared-a.js';
+import { setTag, placeTag, makeSplit, gamePass, GAME_INCLUDES, noiseTexture, NOISE_TEX_WGSL } from './_shared-a.js';
 
 // Painterly filters built on the (anisotropic) Kuwahara filter:
 //   scene : the platformer (or, on the "How it works" tab, a noisy test card)
@@ -12,6 +12,8 @@ import { setTag, placeTag, makeSplit, gamePass, GAME_INCLUDES } from './_shared-
 //           granulation, paper), pencil (hatching by tone, outlines, grain, smudge), or the explainer.
 
 const st = { testMode: false };
+// Unrolled code generation: every array index becomes a constant (no dynamically indexed local arrays).
+const UNROLL8 = (f) => Array.from({ length: 8 }, (_, k) => f(k)).join('\n');
 const splitPos = makeSplit(0.5);
 const RES_SCALE = [1, 0.5, 0.34];
 const KUWA = ['Classic (4 boxes)', 'Generalized (8 sectors)', 'Anisotropic (follows edges)'];
@@ -107,6 +109,7 @@ export default shaderScene({
   include: ['color', ...GAME_INCLUDES],
   resetOn: ['kuwa', 'radius', 'res', 'relief', 'strokes', 'bleed', 'edgeDark', 'gran', 'hatch', 'smudge'],
   renderScale: () => (st.testMode ? 0.5 : 1),
+  textures: { noiseTex: { source: async () => noiseTexture(), filter: 'linear', wrap: 'repeat' } },
   passes: [
     gamePass('scene'),
     {
@@ -185,6 +188,15 @@ fn classicK(uv: vec2f, texel: vec2f, r: i32) -> vec4f {
   }
   return vec4f(outc, 1.0);
 }
+// mean & variance of one sector → weighted contribution (calm sectors dominate)
+fn sectorResult(mk: vec4f, sk: vec3f) -> vec4f {
+  let mw = max(mk.w, 0.000001);
+  let mean = mk.rgb / mw;
+  let v3 = abs(sk / mw - mean * mean);
+  let sigma2 = v3.r + v3.g + v3.b;
+  let wk = 1.0 / (1.0 + pow(8000.0 * sigma2, 4.0));
+  return vec4f(mean * wk, wk);
+}
 fn shade(uv: vec2f, px: vec2f) -> vec4f {
   let texel = 1.0 / TEXSIZE(paint);
   let r = u.radius;
@@ -204,8 +216,8 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
   let eta = (zeta + cos(zc)) / (sin(zc) * sin(zc));
   var m: array<vec4f, 8>;
   var s: array<vec3f, 8>;
-  for (var k = 0; k < 8; k++) { m[k] = vec4f(0.0); s[k] = vec3f(0.0); }
-  var w: array<f32, 8>;
+${UNROLL8((k) => `  m[${k}] = vec4f(0.0); s[${k}] = vec3f(0.0);`)}
+  var w = array<f32, 8>(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
   for (var j = -maxY; j <= maxY; j++) {
     for (var i = -maxX; i <= maxX; i++) {
       let o = vec2f(f32(i), f32(j));
@@ -227,23 +239,13 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
         z = max(0.0, -v.y + vxx); w[5] = z * z; sum += w[5];
         z = max(0.0, v.x + vyy); w[7] = z * z; sum += w[7];
         let g = exp(-3.125 * dot(v, v)) / max(sum, 0.000001);
-        for (var k = 0; k < 8; k++) {
-          let wk = w[k] * g;
-          m[k] += vec4f(c * wk, wk);
-          s[k] += c * c * wk;
-        }
+        let cc = c * c;
+${UNROLL8((k) => `        m[${k}] += vec4f(c, 1.0) * (w[${k}] * g); s[${k}] += cc * (w[${k}] * g);`)}
       }
     }
   }
   var outc = vec4f(0.0);
-  for (var k = 0; k < 8; k++) {
-    let mw = max(m[k].w, 0.000001);
-    let mean = m[k].rgb / mw;
-    let v3 = abs(s[k] / mw - mean * mean);
-    let sigma2 = v3.r + v3.g + v3.b;
-    let wk = 1.0 / (1.0 + pow(8000.0 * sigma2, 4.0));   // calm sectors dominate
-    outc += vec4f(mean * wk, wk);
-  }
+${UNROLL8((k) => `  outc += sectorResult(m[${k}], s[${k}]);`)}
   return vec4f(clamp(outc.rgb / max(outc.w, 1.0e-20), vec3f(0.0), vec3f(1.0)), 1.0);
 }`,
     },
@@ -267,6 +269,7 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
   },
   code: /* wgsl */ `
 ${SRC}
+${NOISE_TEX_WGSL}
 fn paintAt(uv: vec2f) -> vec3f { return TEX(paint, uv).rgb; }
 
 // ------------------------------------------------------------------ oil
@@ -280,7 +283,7 @@ fn oilView(uv: vec2f, p: vec2f) -> vec3f {
   var streak = 0.0;
   for (var k = -3; k <= 3; k++) {
     let q = p + t * f32(k) * 2.5;
-    streak += valueNoise(q * 0.45) + 0.5 * valueNoise(q * 1.1 + vec2f(13.0, 7.0));
+    streak += tnoise(q * 0.45) + 0.5 * tnoise(q * 1.1 + vec2f(13.0, 7.0));
   }
   streak = streak / 10.5;
   // height = paint lightness + streaks → bumps → lighting (impasto)
@@ -292,8 +295,8 @@ fn oilView(uv: vec2f, p: vec2f) -> vec3f {
   var sy = 0.0;
   for (var k = -3; k <= 3; k++) {
     let q = p + t * f32(k) * 2.5;
-    sx += valueNoise((q + vec2f(1.0, 0.0)) * 0.45) - valueNoise((q - vec2f(1.0, 0.0)) * 0.45);
-    sy += valueNoise((q + vec2f(0.0, 1.0)) * 0.45) - valueNoise((q - vec2f(0.0, 1.0)) * 0.45);
+    sx += tnoise((q + vec2f(1.0, 0.0)) * 0.45) - tnoise((q - vec2f(1.0, 0.0)) * 0.45);
+    sy += tnoise((q + vec2f(0.0, 1.0)) * 0.45) - tnoise((q - vec2f(0.0, 1.0)) * 0.45);
   }
   let grad = vec2f(hx, hy) * 1.5 + vec2f(sx, sy) * 0.08 * u.strokes;
   let n = normalize(vec3f(-grad * u.relief * 3.0, 1.0));
@@ -311,13 +314,13 @@ fn oilView(uv: vec2f, p: vec2f) -> vec3f {
 
 // ------------------------------------------------------------------ watercolor
 fn paperBump(p: vec2f) -> f32 {
-  return valueNoise(p * 0.35) * 0.5 + valueNoise(p * 0.9) * 0.3 + valueNoise(p * 2.3) * 0.2;
+  return tnoise(p * 0.35) * 0.5 + tnoise(p * 0.9) * 0.3 + tnoise(p * 2.3) * 0.2;
 }
 fn waterView(uv: vec2f, p: vec2f) -> vec3f {
   let res = u.resolution;
   // bleeding: sample the simplified image through a smooth noise warp
   let wq = p * 0.012;
-  let warp = vec2f(fbm(wq, 3), fbm(wq + vec2f(5.2, 1.3), 3)) * u.bleed * 14.0 / res;
+  let warp = vec2f(tfbm(wq), tfbm(wq + vec2f(5.2, 1.3))) * u.bleed * 14.0 / res;
   let c = paintAt(uv + warp);
   // pooled edges: compare with the average around → where colors change, pigment collects
   var avg = vec3f(0.0);
@@ -329,10 +332,12 @@ fn waterView(uv: vec2f, p: vec2f) -> vec3f {
   let edge = clamp(length(c - avg) * 4.0, 0.0, 1.0);
   // paper & granulation: pigment settles into the paper's valleys
   let bump = paperBump(p);
-  let gran = (valueNoise(p * 0.6) - 0.5) * 0.8 + (bump - 0.5);
+  let gran = (tnoise(p * 0.6) - 0.5) * 0.8 + (bump - 0.5);
   // transparent color: treat the image as transmittance and vary pigment density
-  let wash = mix(vec3f(1.0), c, 0.88);               // a bit lighter than the original
-  let density = 0.85 + edge * 1.6 * u.edgeDark + gran * 0.5 * u.gran;
+  let wash = mix(vec3f(1.0), c, 0.82);               // lighter than the original: transparent paint
+  // uneven drying: low-frequency blotches ("blooms") in every wash
+  let bloom = tfbm(p * 0.006 + vec2f(2.7, 9.1));
+  let density = 0.8 + bloom * 0.45 + edge * 1.6 * u.edgeDark + gran * 0.5 * u.gran;
   let paper = vec3f(0.98, 0.965, 0.93) * (0.95 + 0.05 * bump * u.gran + 0.0);
   var col = paper * pow(clamp(wash, vec3f(0.001), vec3f(1.0)), vec3f(max(density, 0.2)));
   // highlights: let the white paper show where the scene is very light
@@ -347,18 +352,18 @@ fn waterView(uv: vec2f, p: vec2f) -> vec3f {
 // ------------------------------------------------------------------ pencil sketch
 fn hatchLayer(p: vec2f, ang: f32, period: f32, seed: f32) -> f32 {
   var q = rot2(ang) * p;
-  q.y += (valueNoise(vec2f(q.x * 0.02, seed)) - 0.5) * period * 0.8;   // hand wobble
+  q.y += (tnoise(vec2f(q.x * 0.02, seed)) - 0.5) * period * 0.8;   // hand wobble
   let row = floor(q.y / period);
   let d = abs(fract(q.y / period) - 0.5) * period;
   let line = 1.0 - smoothstep(0.35, 1.1, d);
   // strokes have ends: break the line into dashes of varying length
-  let dash = smoothstep(0.25, 0.55, valueNoise(vec2f(q.x * 0.03 + row * 7.3, row * 1.7 + seed)));
+  let dash = smoothstep(0.3, 0.55, tnoise(vec2f(q.x * 0.07 + row * 7.3, row * 1.7 + seed)));
   return line * dash;
 }
 fn sketchView(uv: vec2f, p: vec2f) -> vec3f {
   let res = u.resolution;
   let c = paintAt(uv);
-  let l = clamp((luma(c) - 0.5) * 1.25 + 0.55, 0.0, 1.0);
+  let l = clamp((luma(c) - 0.5) * 1.4 + 0.64, 0.0, 1.0);
   let per = u.hatch;
   var g = 0.0;
   g = max(g, hatchLayer(p, 0.785, per, 1.0) * (1.0 - smoothstep(0.7, 0.86, l)));
@@ -366,7 +371,7 @@ fn sketchView(uv: vec2f, p: vec2f) -> vec3f {
   g = max(g, hatchLayer(p, 0.15, per * 0.85, 3.0) * (1.0 - smoothstep(0.3, 0.46, l)));
   g = max(g, hatchLayer(p, 1.4, per * 0.7, 4.0) * (1.0 - smoothstep(0.12, 0.28, l)));
   // outlines: edges of the simplified image, with a slight wobble
-  let jit = (vec2f(valueNoise(p * 0.05), valueNoise(p * 0.05 + 9.0)) - 0.5) * 2.0 / res;
+  let jit = (vec2f(tnoise(p * 0.05), tnoise(p * 0.05 + 9.0)) - 0.5) * 2.0 / res;
   let e = 1.2 / res;
   let gx = luma(paintAt(uv + jit + vec2f(e.x, 0.0))) - luma(paintAt(uv + jit - vec2f(e.x, 0.0)));
   let gy = luma(paintAt(uv + jit + vec2f(0.0, e.y))) - luma(paintAt(uv + jit - vec2f(0.0, e.y)));
@@ -376,7 +381,7 @@ fn sketchView(uv: vec2f, p: vec2f) -> vec3f {
   let tooth = mix(1.0, 0.45 + 0.75 * grain, u.gran);
   var ink = max(g * 0.75, outline * 0.9) * tooth;
   // smudge: soft graphite tone in the darker areas, blotchy
-  let blot = valueNoise(p * 0.015) * 0.6 + valueNoise(p * 0.04) * 0.4;
+  let blot = tnoise(p * 0.015) * 0.6 + tnoise(p * 0.04) * 0.4;
   let smear = (1.0 - l) * u.smudge * (0.35 + 0.4 * blot);
   ink = 1.0 - (1.0 - ink) * (1.0 - smear * 0.55);
   let paper = vec3f(0.96, 0.94, 0.89) * (0.96 + 0.06 * grain);
@@ -505,8 +510,8 @@ for (var j = -maxY; j <= maxY; j++) { for (var i = -maxX; i <= maxX; i++) {
   var v = vec2f(dot(o, t) * 0.5 / a, dot(o, tp) * 0.5 / b);   // into the unit circle
   if (dot(v, v) <= 0.25) {
     let c = srcAt(uv + o * texel);
-    // w[0..7] = squared polynomial sector weights (see source), then:
-    for (var k = 0; k < 8; k++) { m[k] += vec4f(c * w[k] * g, w[k] * g); s[k] += c * c * w[k] * g; }
+    // w[0..7] = squared polynomial sector weights (see source), then for each sector k:
+    m[k] += vec4f(c, 1.0) * (w[k] * g);  s[k] += c * c * (w[k] * g);
   }
 }}
 for (var k = 0; k < 8; k++) {

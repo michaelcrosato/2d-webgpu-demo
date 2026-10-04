@@ -226,7 +226,7 @@ fn stainedGlass(lp: vec2f, t: f32) -> vec3f {
   c *= 0.55 + 0.45 * smoothstep(0.0, 0.25, bd);
   c += g * 0.25 * pow(max(0.0, sin(t * 0.7 + h.z * 6.0)), 8.0);
   // lead came with a rounded highlight
-  let w = 0.07;
+  let w = 0.07 * u.lineW;
   let lead = 1.0 - smoothstep(w - 0.015, w, bd);
   let prof = clamp(bd / w, 0.0, 1.0);
   let leadC = vec3f(0.12, 0.12, 0.14) + vec3f(0.35) * (1.0 - prof) * (1.0 - prof) * 0.6;
@@ -250,7 +250,7 @@ fn crackedEarth(lp: vec2f) -> vec3f {
   let v2 = vor(p * 3.0 + 11.0, 0.9, 0.0);
   c *= 1.0 - 0.35 * (1.0 - smoothstep(0.0, 0.06, v2.f2 - v2.f1)) * smoothstep(0.08, 0.2, bd);
   // main cracks: width varies with noise
-  let cw = 0.035 + 0.03 * perlin(p * 2.0);
+  let cw = (0.035 + 0.03 * perlin(p * 2.0)) * u.lineW;
   let crack = 1.0 - smoothstep(cw * 0.5, cw, bd);
   return mix(c, vec3f(0.13, 0.08, 0.05), crack);
 }
@@ -265,7 +265,7 @@ fn giraffe(lp: vec2f) -> vec3f {
   var spot = mix(vec3f(0.62, 0.33, 0.12), vec3f(0.5, 0.25, 0.09), h);
   spot = mix(spot * 0.8, spot * 1.1, smoothstep(0.05, 0.35, bd));
   spot *= 0.9 + 0.1 * perlin(p * 9.0);
-  let w = 0.1 + 0.02 * perlin(p * 3.0);
+  let w = (0.1 + 0.02 * perlin(p * 3.0)) * u.lineW;
   return mix(cream, spot, smoothstep(w, w + 0.025, bd));
 }
 
@@ -309,7 +309,7 @@ fn dragonScales(lp: vec2f, t: f32) -> vec3f {
   // dark rim + a thin bright lip just inside it
   let ew = dEdge * u.resolution.y * 0.5 / (u.scale * 0.6);
   c = mix(c, c * 1.5 + 0.08, (1.0 - smoothstep(1.5, 4.0, ew)) * smoothstep(0.2, 0.6, cq.y) * 0.5);
-  c *= smoothstep(0.0, 1.6, ew) * 0.85 + 0.15;
+  c *= smoothstep(0.0, 1.6 * u.lineW, ew) * 0.85 + 0.15;
   return c;
 }
 
@@ -521,6 +521,7 @@ export default shaderScene({
       help: 'Changing how distance is measured changes the shape of the cells.',
     },
     { type: 'toggle', key: 'points', label: 'Show points & outlines', value: true, showFor: ['cells'] },
+    { type: 'slider', key: 'lineW', label: 'Border width', min: 0.3, max: 3, step: 0.01, value: 1, showFor: ['nature'], help: 'Scales the lead lines, cracks, giraffe borders and scale rims — all read from the same border distance.' },
     { type: 'slider', key: 'anim', label: 'Animation speed', min: 0, max: 3, step: 0.01, value: 0.6, showFor: ['cells', 'nature'], help: 'Feature points orbit inside their cells.' },
     { type: 'select', key: 'team', label: 'Nation for new cities', value: 'red', showFor: ['territory'], options: TEAMS.map((t) => ({ value: t, label: t[0].toUpperCase() + t.slice(1) })) },
     { type: 'slider', key: 'culture', label: 'Culture radius', min: 0.05, max: 1, step: 0.005, value: 0.26, showFor: ['territory'], help: 'How far (× screen height) a city can claim land. Larger = borders meet.' },
@@ -532,7 +533,7 @@ export default shaderScene({
   ],
   uniforms: {
     scale: 'f32', jitter: 'f32', viz: 'f32', metric: 'f32', points: 'f32', anim: 'f32', team: 'f32', culture: 'f32', borderW: 'f32',
-    hexes: 'f32', seed: 'f32', ncity: 'f32', cities: `array<vec4f, ${MAX_CITIES}>`,
+    hexes: 'f32', lineW: 'f32', seed: 'f32', ncity: 'f32', cities: `array<vec4f, ${MAX_CITIES}>`,
   },
   include: ['noise', 'sdf', 'color'],
   onAction(key) {

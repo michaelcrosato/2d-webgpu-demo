@@ -210,7 +210,7 @@ function initBodies(example, N, soft) {
 }
 
 export default {
-  interaction: 'Hold the mouse button to pull with a giant “hand” of gravity. Scroll to zoom.',
+  interaction: 'Hold the mouse to pull with gravity. Scroll to zoom.',
   examples,
   controls,
   wheel: true,
@@ -352,9 +352,9 @@ fn step(@builtin(global_invocation_id) gid: vec3u, @builtin(local_invocation_id)
   var c = TEX(hdr, uv).rgb * u.exposure + TEX(bloomTex, uv).rgb * u.bloom * 1.5;
   // deep-space backdrop with faint background stars
   var bg = mix(vec3f(0.008, 0.01, 0.025), vec3f(0.03, 0.015, 0.045), uv.y);
-  let cell = floor(px / 3.0);
+  let cell = floor(px / 2.0);
   let h = hash21(cell);
-  bg += vec3f(0.6, 0.65, 0.8) * step(0.9975, h) * (0.3 + 0.7 * hash21(cell + 7.0));
+  bg += vec3f(0.5, 0.55, 0.7) * step(0.9985, h) * (0.15 + 0.5 * hash21(cell + 7.0));
   return vec4f(tonemapACES(c) + bg, 1.0);
 }`,
     });
@@ -463,9 +463,9 @@ fn step(@builtin(global_invocation_id) gid: vec3u, @builtin(local_invocation_id)
         blurV.draw(enc, bloomA, { src: bloomB });
         tone.draw(enc, { view: ctx.target, format: gpu.format }, { hdr, bloomTex: bloomA });
         const inter = state.N * state.sources * steps;
-        readout.textContent = `${state.N.toLocaleString()} bodies × ${state.sources.toLocaleString()} sources = ${
-          inter >= 1e9 ? (inter / 1e9).toFixed(2) + ' billion' : (inter / 1e6).toFixed(1) + ' million'
-        } interactions/frame · ${groups} workgroups × ${TILE}`;
+        readout.textContent = `${state.N.toLocaleString()} × ${state.sources.toLocaleString()} = ${
+          inter >= 1e9 ? (inter / 1e9).toFixed(2) + ' G' : (inter / 1e6).toFixed(1) + ' M'
+        } interactions/frame`;
       },
     };
   },

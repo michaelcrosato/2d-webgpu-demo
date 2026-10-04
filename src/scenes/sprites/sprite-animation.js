@@ -852,6 +852,15 @@ sprites.draw(x, groundY, 16 * s * sx, 16 * s * sy, { anchor: [0.5, 1] });`,
       onChange(key) {
         if (key === 'anim') clickedAnim = null;
       },
+      onAction(key) {
+        if (key !== 'reset') return;
+        clickedAnim = null;
+        sq.t0 = ctx.time;
+        hits.clear();
+        Object.assign(hero, { x: 3 * TILE, y: 9 * TILE, vx: 0, vy: 0, state: 'IDLE', prev: 'IDLE', why: '' });
+        manual = false;
+        score = 0;
+      },
       frame(ctx) {
         shapes.begin(); // once per frame: every flush draws only what was added since the previous flush
         sprites.begin();

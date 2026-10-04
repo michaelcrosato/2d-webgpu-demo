@@ -655,8 +655,7 @@ var c = TEX(hdr, uv + off).rgb;`,
         if (slash) {
           const C = COMBO[slash.k];
           slash.t += dt;
-          const [px, py] = heroPivot();
-          const R = ctx.height * 0.3 * C.r;
+          const py = heroPivot()[1];
           if (!slash.hit && slash.t > C.dur * 0.55) {
             slash.hit = true;
             const dxp = ctx.width * 0.4 + ctx.height * 0.26;
@@ -682,8 +681,6 @@ var c = TEX(hdr, uv + off).rgb;`,
             comboQueued = 0;
             startSlash();
           }
-          void px;
-          void R;
         }
         // dummy wobble spring
         dummy.vrot += (-dummy.rot * 60 - dummy.vrot * 6) * dt;

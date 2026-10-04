@@ -56,6 +56,37 @@ struct LayerOut { col: vec3f, cov: f32, glow: vec3f };
 
 fn aaf(d: f32, pw: f32) -> f32 { return clamp(0.5 - d / pw, 0.0, 1.0); }
 
+// value-noise fBm / ridged noise in [0, 1]: no sin/cos per octave, so it's cheap even on weak GPUs
+fn fbmV(p0: vec2f, oct: i32) -> f32 {
+  var p = p0;
+  var s = 0.0;
+  var a = 0.5;
+  var n = 0.0;
+  for (var i = 0; i < 6; i++) {
+    if (i >= oct) { break; }
+    s += valueNoise(p) * a;
+    n += a;
+    p = p * 2.03 + vec2f(1.7, 9.2);
+    a *= 0.5;
+  }
+  return s / n;
+}
+fn ridgedV(p0: vec2f, oct: i32) -> f32 {
+  var p = p0;
+  var s = 0.0;
+  var a = 0.5;
+  var n = 0.0;
+  for (var i = 0; i < 6; i++) {
+    if (i >= oct) { break; }
+    let v = 1.0 - abs(valueNoise(p) * 2.0 - 1.0);
+    s += v * v * a;
+    n += a;
+    p = p * 2.07 + vec2f(3.1, 5.3);
+    a *= 0.5;
+  }
+  return s / n;
+}
+
 // ------------------------------------------------------------------ forest
 // cheap pine silhouette: two stacked triangles + trunk as an approximate signed distance (no full triangle SDF)
 fn pine(p: vec2f, base: vec2f, h: f32) -> f32 {
@@ -80,7 +111,7 @@ fn skyForest(p: vec2f, aspect: f32) -> vec3f {
   // soft clouds
   if (p.y > 0.04 && p.y < 0.46) {
     let cq = vec2f(p.x * 1.3 + u.camX * 0.02 + u.time * 0.01, p.y * 3.5);
-    let cl = smoothstep(0.55, 0.75, fbm(cq * 2.0, 4) * 0.5 + 0.5) * smoothstep(0.05, 0.2, p.y) * smoothstep(0.45, 0.25, p.y);
+    let cl = smoothstep(0.52, 0.72, fbmV(cq * 3.0, 4)) * smoothstep(0.05, 0.2, p.y) * smoothstep(0.45, 0.25, p.y);
     c = mix(c, vec3f(1.0, 0.95, 0.9), cl * 0.75);
   }
   return c;
@@ -94,9 +125,9 @@ fn forestLayer(t: f32, x: f32, y: f32, seed: f32, pw: f32) -> LayerOut {
   if (t < 0.95 && y < top) { return LayerOut(vec3f(0.0), 0.0, vec3f(0.0)); }
   var h = 0.0;
   if (t < 0.15) {
-    h = base - 0.03 - 0.22 * ridged(vec2f(x * 0.8, seed), 4);
+    h = base - 0.03 - 0.22 * ridgedV(vec2f(x * 1.6, seed), 4);
   } else {
-    h = base - mix(0.1, 0.04, t) * (fbm(vec2f(x * mix(1.2, 3.5, t), seed), 3) * 0.5 + 0.5);
+    h = base - mix(0.1, 0.04, t) * fbmV(vec2f(x * mix(2.4, 7.0, t), seed), 3);
   }
   var cov = aaf(h - y, pw);
   if (t >= 0.15 && t < 0.95) {
@@ -201,10 +232,10 @@ fn cityLayer(t: f32, x: f32, y: f32, seed: f32, pw: f32) -> LayerOut {
 // ------------------------------------------------------------------ space
 fn skySpace(p: vec2f, aspect: f32) -> vec3f {
   let q = vec2f(p.x + u.camX * 0.015, p.y + u.camY * 0.01);
-  let warp = vec2f(fbm(q * 1.6, 2), fbm(q * 1.6 + vec2f(5.2, 1.3), 2));
-  let n = fbm(q * 1.4 + warp * 0.8, 4) * 0.5 + 0.5;
+  let warp = vec2f(valueNoise(q * 2.4), valueNoise(q * 2.4 + vec2f(5.2, 1.3))) * 2.0 - 1.0;
+  let n = fbmV(q * 2.4 + warp * 0.8, 4);
   var c = mix(vec3f(0.01, 0.01, 0.03), vec3f(0.18, 0.06, 0.28), smoothstep(0.35, 0.8, n));
-  c = mix(c, vec3f(0.05, 0.35, 0.45), smoothstep(0.55, 0.95, fbm(q * 2.3 - warp, 3) * 0.5 + 0.5) * 0.6);
+  c = mix(c, vec3f(0.05, 0.3, 0.4), smoothstep(0.55, 0.8, fbmV(q * 3.5 - warp, 2)) * 0.4);
   c += vec3f(0.9, 0.45, 0.3) * smoothstep(0.72, 0.95, n) * 0.35;
   return c;
 }
@@ -235,7 +266,7 @@ fn spaceLayer(t: f32, q: vec2f, seed: f32, pw: f32) -> LayerOut {
       let pc = palette(hue, vec3f(0.5), vec3f(0.45), vec3f(1.0), vec3f(0.0, 0.33, 0.67));
       let nz = sqrt(max(0.0, 1.0 - dot(rel, rel)));
       let light = clamp(dot(vec3f(rel, nz), normalize(vec3f(-0.6, -0.5, 0.65))), 0.0, 1.0);
-      let bands = 0.8 + 0.2 * sin(rel.y * 12.0 + fbm(rel * 2.5 + vec2f(hue * 9.0, 0.0), 3) * 4.0);
+      let bands = 0.8 + 0.2 * sin(rel.y * 12.0 + (fbmV(rel * 4.0 + vec2f(hue * 9.0, 0.0), 3) * 2.0 - 1.0) * 4.0);
       col = pc * (0.05 + 0.95 * light) * bands;
       cov = aaf(pd, pw);
       glow += pc * exp(-max(pd, 0.0) / (prad * 0.15)) * 0.25 * (1.0 - cov);
@@ -255,7 +286,7 @@ fn spaceLayer(t: f32, q: vec2f, seed: f32, pw: f32) -> LayerOut {
     let ac = 0.3;
     let acell = floor(q / ac);
     let ar = hash22(acell + vec2f(seed, 3.0));
-    if (ar.x > 0.5) {
+    if (ar.x > 0.64) {
       let apos = (acell + 0.25 + 0.5 * ar) * ac;
       let arad = 0.018 + 0.035 * ar.y;
       let rel = q - apos;
@@ -333,7 +364,8 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
       <li>Each layer has a <b>distance z</b> (here from 10 down to 1). When the camera moves by Δx, a layer moves by <code>Δx / z</code>
         (that’s what perspective does to real objects). The <i>Parallax strength</i> slider raises it to a power: 0 = flat, 2 = exaggerated.</li>
       <li>In practice: <code>layerX = screenX + cameraX × factor</code> before evaluating the layer — the shader “looks up” the layer at a shifted position.</li>
-      <li>Layers are drawn <b>back to front</b>; each returns a colour and a coverage (alpha) that is mixed over what’s behind it.</li>
+      <li>Each layer returns a colour and a coverage (alpha). They are composited <b>front to back</b>: a running “transmittance” says how much of the
+        layers behind still shows through, and the loop stops early once a pixel is fully covered — the sky is only evaluated where it’s visible.</li>
       <li><b>Atmospheric perspective</b>: air scatters light, so distant things take on the sky colour and lose contrast:
         <code>mix(layerColor, hazeColor, fog × (1 − nearness)^1.35)</code>.</li>
       <li>Things at infinity (sun, moon, stars) don’t move at all; the nebula moves at 1.5% of the camera speed.</li>
@@ -364,10 +396,11 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
     api: `<p>Pure fragment shader work — identical on WebGL2 and WebGPU (this scene runs on both; the WGSL is translated to GLSL automatically).</p>`,
     code: [
       {
-        title: 'The parallax loop (back to front)',
+        title: 'The parallax loop (front to back, with early exit)',
         lang: 'wgsl',
-        src: `for (var i = 0; i < 8; i++) {
-  if (i >= n) { break; }
+        src: `for (var j = 0; j < 8; j++) {
+  if (j >= n) { break; }
+  let i = n - 1 - j;                         // nearest layer first
   let t = f32(i) / max(f32(n - 1), 1.0);   // 0 = farthest … 1 = nearest
   let z = mix(10.0, 1.0, t);                 // distance of this layer
   let par = pow(1.0 / z, u.strength);        // how much it moves with the camera
@@ -375,8 +408,11 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
   let ly = p.y + u.camY * par * 0.35;        // vertical parallax from the mouse
   let L = forestLayer(t, lx, ly, seed, pw);  // colour + coverage of this layer
   let fogAmt = u.fog * pow(1.0 - t, 1.35);   // atmospheric perspective
-  col = mix(col, mix(L.col, haze, fogAmt), L.cov) + L.glow;
-}`,
+  acc += T * (mix(L.col, haze, fogAmt) * L.cov + L.glow);
+  T *= 1.0 - L.cov;                          // what still shows through
+  if (T < 0.003) { break; }                  // fully covered: skip the rest
+}
+col = acc + T * sky;`,
       },
       {
         title: 'With textures instead (typical engine code)',

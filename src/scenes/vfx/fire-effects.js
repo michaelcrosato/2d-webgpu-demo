@@ -74,6 +74,8 @@ function textCanvas() {
 // state shared between bind() and the pass iteration count (warm-up of the Doom fire)
 let warm = 0;
 let seen = '';
+// the headless test harness (software GPU) renders the final image at half resolution
+let testScale = 1;
 
 export default shaderScene({
   interaction: 'Use the sliders: wind, turbulence, height and palette change all three techniques.',
@@ -91,7 +93,7 @@ export default shaderScene({
       label: '2 · Doom PSX fire',
       kind: 'Classic',
       note: 'The 1995 PlayStation Doom title fire: a grid of heat values. Each frame every cell copies the cell <b>below</b> it, nudged sideways at random and randomly cooled by one step. The bottom row is the fuel. Set <i>Intensity</i> to 0 and watch it die out.',
-      params: { intensity: 1, wind: 0.15, height: 1.3, palette: 'doom', temperature: 1, pixel: 4 },
+      params: { intensity: 1, wind: 0.15, height: 1, palette: 'doom', temperature: 1, pixel: 4 },
       hint: 'Set Intensity to 0 to let the fire die out.',
     },
     {
@@ -99,7 +101,7 @@ export default shaderScene({
       label: '3 · Particle fire',
       kind: 'Comparison',
       note: 'Fire as particles: each blob is born at the base, rises, drifts with the wind, shrinks and cools. Here they are faked inside the fragment shader (every pixel loops over every particle) — fine for one fire, but real games use a particle system (see GPU Particles). Toggle <b>Show particles</b>.',
-      params: { intensity: 1, wind: 0.15, turbulence: 1, height: 1, palette: 'natural', temperature: 1, count: 64, speed: 1 },
+      params: { intensity: 1, wind: 0.1, turbulence: 1, height: 1, palette: 'natural', temperature: 1, count: 96, speed: 1 },
       hint: 'Toggle “Show particles” and change the count.',
     },
     {
@@ -135,7 +137,7 @@ export default shaderScene({
     { type: 'slider', key: 'speed', label: 'Speed', min: 0, max: 3, step: 0.01, value: 1, showFor: ['noise', 'particles', 'game'] },
     { type: 'toggle', key: 'layers', label: 'Show the layers', value: false, help: 'noise → gradient → heat → palette, left to right.', showFor: ['noise'] },
     { type: 'slider', key: 'pixel', label: 'Fire pixel size', min: 1, max: 12, step: 1, value: 4, help: 'Size of one automaton cell on screen.', showFor: ['doom'] },
-    { type: 'slider', key: 'count', label: 'Particles', min: 8, max: 128, step: 1, value: 64, help: 'Each pixel loops over all of them: cost grows linearly.', showFor: ['particles'] },
+    { type: 'slider', key: 'count', label: 'Particles', min: 8, max: 128, step: 1, value: 96, help: 'Each pixel loops over all of them: cost grows linearly.', showFor: ['particles'] },
     { type: 'toggle', key: 'showParticles', label: 'Show particles', value: false, showFor: ['particles'] },
   ],
   uniforms: {
@@ -160,6 +162,7 @@ export default shaderScene({
   },
   bind(params, ctx) {
     // warm the Doom automaton up for a few frames after (re)start so it isn't empty
+    testScale = ctx.testMode ? 0.5 : 1;
     const key = `${ctx.example}|${ctx.width}x${ctx.height}|${params.pixel}`;
     if (key !== seen || ctx.frame === 0) {
       seen = key;
@@ -174,6 +177,7 @@ export default shaderScene({
   onAction(key) {
     if (key === 'reset') warm = 4;
   },
+  renderScale: () => testScale,
   passes: [
     {
       name: 'doom',
@@ -274,26 +278,26 @@ fn particleFire(uv: vec2f, px: vec2f) -> vec3f {
   var col = bgSky(uv);
   // floor & logs
   if (p.y < base.y) { col = vec3f(0.02, 0.012, 0.01); }
-  let H = 0.62 * u.height;
+  let H = 0.72 * u.height;
   // bounding box: skip the loop for pixels far from the fire
   if (abs(p.x) > 0.5 + abs(u.wind) * 0.4 || p.y > base.y + H + 0.2) { return col; }
   var heatSum = 0.0;
   var ring = 0.0;
-  let n = i32(u.count);
+  let n = select(i32(u.count), min(i32(u.count), 40), u.lod > 0.5);
   for (var i = 0; i < 128; i++) {
     if (i >= n) { break; }
     let fi = f32(i);
     let h = hash13(fi * 7.31 + 1.0);
     let life = 0.8 + 0.6 * h.z;
     let age = fract(t / life + h.x);                  // 0..1, loops forever: "respawn"
-    let spawn = base + vec2f((h.y - 0.5) * 0.3, 0.0);
+    let spawn = base + vec2f((h.y - 0.5) * 0.24, 0.0);
     let wob = (sin(age * 7.0 + fi * 1.7) * 0.03 + sin(age * 13.0 + fi * 4.1 + t * 2.0) * 0.015) * u.turbulence;
     // rise, converge toward the middle (teardrop), lean with the wind
     let pos = vec2f(spawn.x * (1.0 - 0.75 * age) + u.wind * age * age * 0.35 + wob, spawn.y + age * H);
-    let size = mix(0.07, 0.016, age) * (0.7 + 0.6 * h.z);
+    let size = mix(0.045, 0.02, age) * (0.7 + 0.6 * h.z) * (0.6 + 0.4 * smoothstep(0.0, 0.15, age) + 0.4);
     let d = length(p - pos);
-    let fade = (1.0 - age) * (1.0 - age);
-    heatSum += exp(-(d * d) / (size * size)) * fade * 0.42 * (48.0 / max(u.count, 8.0) * 0.6 + 0.4);
+    let fade = pow(1.0 - age, 1.3);
+    heatSum += exp(-(d * d) / (size * size)) * fade * 0.5 * (64.0 / max(f32(n), 8.0) * 0.6 + 0.4);
     if (u.showParticles > 0.5) { ring += 1.0 - smoothstep(0.0, 0.0025, abs(d - size)); }
   }
   let heat = clamp(heatSum * u.intensity, 0.0, 1.0);
@@ -415,7 +419,9 @@ fn gameScene(uv: vec2f, px: vec2f) -> vec3f {
   return col * (1.0 - dot(v, v) * 0.9);
 }
 
-fn shade(uv: vec2f, px: vec2f) -> vec4f {
+fn shade(uv: vec2f, px0: vec2f) -> vec4f {
+  // canvas-pixel coordinates (px0 is in render-target pixels, which differ when renderScale < 1)
+  let px = uv * u.resolution;
   let ex = i32(u.example);
   var c: vec3f;
   if (ex == 0) { c = noiseFire(uv, px); }

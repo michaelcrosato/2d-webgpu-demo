@@ -326,7 +326,7 @@ export default {
       label: 'Bunnymark',
       kind: 'Benchmark',
       note: 'The classic 2D renderer stress test (from PixiJS): every bunny bounces with gravity. <b>Hold the mouse</b> to spawn more and watch the counter — the sprite count climbs into the hundreds of thousands while the draw-call count stays at <b>1</b>.',
-      hint: 'Hold the mouse to spawn bunnies at the cursor. Buttons add 10k / 100k at once.',
+      hint: 'Hold the mouse to spawn bunnies',
       params: { size: 2 },
     },
     {
@@ -334,7 +334,7 @@ export default {
       label: 'Bullet hell',
       kind: 'In a game',
       note: 'Emitters fire rotating spirals, counter-rotating rosettes and curving galaxy arms. Every bullet is a slot in a GPU ring buffer: the compute shader spawns, moves, curves and kills them; one draw renders all of them.',
-      hint: 'Hold the mouse to drag the emitters to the cursor.',
+      hint: 'Hold the mouse to pull the emitters',
       params: { size: 2 },
     },
     {
@@ -342,7 +342,7 @@ export default {
       label: 'Crowd / army',
       kind: 'In a game',
       note: 'Thousands of animated knights wander, idle and turn around. Each picks its animation frame on the GPU from its own phase offset, gets a team color by palette swap, and is y-sorted for free by the <b>depth buffer</b>. <b>Hold the mouse</b> to rally them.',
-      hint: 'Hold the mouse to rally the army to the cursor; release to send them back.',
+      hint: 'Hold the mouse to rally the army',
       params: { size: 1 },
     },
   ],

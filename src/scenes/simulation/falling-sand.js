@@ -716,7 +716,8 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
           frameNo++;
           if (painting) cs.run(sim, 'paint', groups, res(steps[0]));
           // fixed rate: speed steps per 1/60 s (capped)
-          const n = Math.min(MAX_SUB, tick.take(Math.min(ctx.dt, 0.1), p.speed * 60 * (ctx.testMode ? 0.5 : 1), MAX_SUB));
+          const cap = ctx.testMode ? 6 : MAX_SUB;
+          const n = tick.take(Math.min(ctx.dt, 0.1), p.speed * 60, cap);
           const bgroups = [Math.ceil((gwid + 1) / 2 / 8), Math.ceil((ghei + 1) / 2 / 8)];
           for (let i = 0; i < n; i++) {
             const st = steps[i];

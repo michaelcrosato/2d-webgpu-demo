@@ -354,7 +354,17 @@ view.rotation = rotation + maxAngle * s * noise(3, t);`,
           lastZoomParam = v;
         }
       },
-      onAction() {},
+      onAction(key) {
+        if (key !== 'reset') return;
+        Object.assign(player, { x: (MW / 2 - 12) * TS, y: (MH / 2) * TS + 8, vx: 0, vy: 0 });
+        camPos.x = player.x;
+        camPos.y = player.y;
+        manual = false;
+        trauma = 0;
+        zoomMul = 1;
+        rotKeys = 0;
+        traumaHist.length = 0;
+      },
       frame(ctx) {
         shapes.begin(); // once per frame; each flush draws what was added since the previous flush
         sprites.begin();

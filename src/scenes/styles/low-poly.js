@@ -125,12 +125,12 @@ fn hillY(x: f32, aspect: f32) -> f32 { let k = (x - aspect * 0.9) / 0.5; return 
 fn regionOf(q: vec2f, aspect: f32) -> f32 {
   let hy = hillY(q.x, aspect);
   // pines on the hill: tall triangles
-  for (var k = 0; k < 5; k++) {
-    let tx = aspect * (0.72 + 0.06 * f32(k)) + 0.015 * sin(f32(k) * 5.0);
-    let base = hillY(tx, aspect) + 0.02;
-    let hgt = 0.15 + 0.07 * fract(f32(k) * 0.618);
+  for (var k = 0; k < 3; k++) {
+    let tx = aspect * 0.76 + 0.13 * f32(k);
+    let base = hillY(tx, aspect) + 0.03;
+    let hgt = 0.26 + 0.06 * fract(f32(k) * 0.618 + 0.3);
     let rel = q - vec2f(tx, base);
-    if (rel.y < 0.0 && rel.y > -hgt && abs(rel.x) < (rel.y + hgt) * 0.3) { return 6.0; }
+    if (rel.y < 0.0 && rel.y > -hgt && abs(rel.x) < (rel.y + hgt) * 0.28) { return 6.0; }
   }
   if (q.y > hy) { return 5.0; }
   if (q.y > 0.64) { return 4.0; }

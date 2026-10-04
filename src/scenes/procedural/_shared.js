@@ -100,17 +100,22 @@ export class PanZoom {
       this.ty = wy - (p.y - ctx.height / 2) * s2;
       this.tzoom = nz;
     }
-    // ease toward target (log-space for zoom so it feels uniform)
+    // ease toward the target: zoom in log space, and the target's SCREEN-space offset (not the
+    // world-space one) so that deep fly-tos keep the destination on screen the whole way
     const k = smooth;
-    if (Math.abs(Math.log(this.tzoom / this.zoom)) > 1e-4 || Math.abs(this.tx - this.x) + Math.abs(this.ty - this.y) > 0) {
-      const lz = Math.log(this.zoom) + (Math.log(this.tzoom) - Math.log(this.zoom)) * k;
-      const nzoom = Math.exp(lz);
-      // move the center so the zoom pivots smoothly
-      this.x += (this.tx - this.x) * k;
-      this.y += (this.ty - this.y) * k;
-      this.zoom = nzoom;
-      if (Math.abs(this.tx - this.x) < 1e-14 / this.zoom) this.x = this.tx;
-      if (Math.abs(this.ty - this.y) < 1e-14 / this.zoom) this.y = this.ty;
+    const lz = Math.log(this.zoom);
+    const ltz = Math.log(this.tzoom);
+    const ox = (this.tx - this.x) * this.zoom;
+    const oy = (this.ty - this.y) * this.zoom;
+    if (Math.abs(ltz - lz) > 1e-5 || Math.abs(ox) + Math.abs(oy) > 1e-6) {
+      const nz = Math.exp(lz + (ltz - lz) * k);
+      this.zoom = nz;
+      this.x = this.tx - (ox * (1 - k)) / nz;
+      this.y = this.ty - (oy * (1 - k)) / nz;
+    } else {
+      this.zoom = this.tzoom;
+      this.x = this.tx;
+      this.y = this.ty;
     }
     return clicked;
   }
