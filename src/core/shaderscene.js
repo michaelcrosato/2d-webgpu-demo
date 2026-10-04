@@ -136,13 +136,13 @@ async function initGPU(spec, ctx) {
     extraTex[name] = gpu.textureFromImage(e.source, { label: name }).createView();
   }
 
-  const mk = (label, code, format, inc = include) =>
-    gpu.fullscreen({ label, code, uniforms: block, textures: texNames, include: inc, format, unfilterable });
+  const mk = (label, code, format, inc = include, tex = texNames) =>
+    gpu.fullscreen({ label, code, uniforms: block, textures: tex, include: inc, format, unfilterable });
   const gameInclude = [...new Set([...include, ...GAME_SCENE_INCLUDES])];
 
   const passFx = passes.map((p) => mk(`pass:${p.name}`, p.code, fmt(p.format)));
   const imageFx = mk('image', spec.code, null);
-  const gameFx = spec.input === 'game' ? mk('game', GAME_SCENE_CODE, 'rgba8unorm', gameInclude) : null;
+  const gameFx = spec.input === 'game' ? mk('game', GAME_SCENE_CODE, 'rgba8unorm', gameInclude, []) : null;
 
   let targets = {}; // name -> pingPong
   let gameTarget = null;
@@ -271,11 +271,11 @@ async function initGL(spec, ctx) {
     extraTex[name] = kit.textureFromImage(e.source, { filter: e.filter, wrap: e.wrap });
   }
 
-  const mk = (label, code, inc = include) => kit.fullscreen({ label, code, uniforms: block, textures: texNames, include: inc });
+  const mk = (label, code, inc = include, tex = texNames) => kit.fullscreen({ label, code, uniforms: block, textures: tex, include: inc });
   const gameInclude = [...new Set([...include, ...GAME_SCENE_INCLUDES])];
   const passFx = passes.map((p) => mk(`pass:${p.name}`, p.code));
   const imageFx = mk('image', spec.code);
-  const gameFx = spec.input === 'game' ? mk('game', GAME_SCENE_CODE, gameInclude) : null;
+  const gameFx = spec.input === 'game' ? mk('game', GAME_SCENE_CODE, gameInclude, []) : null;
 
   const targets = {};
   const sizes = {};

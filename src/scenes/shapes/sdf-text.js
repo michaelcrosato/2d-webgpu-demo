@@ -28,16 +28,19 @@ fn insideAt(p: vec2i) -> bool {
   let q = clamp(p, vec2i(0), s - vec2i(1));
   return textureLoad(src, q, 0).a >= 0.5;
 }
-// 1) seeds: inside pixels that touch an outside pixel (the glyph edge). 0 = no seed.
+fn alphaAt(p: vec2i) -> f32 { return textureLoad(src, clamp(p, vec2i(0), vec2i(u.hiSize) - vec2i(1)), 0).a; }
+// 1) seeds: the glyph edge = partially covered (anti-aliased) pixels, plus inside pixels that
+//    touch an outside pixel. 0 = no seed.
 @compute @workgroup_size(8, 8) fn seed(@builtin(global_invocation_id) id: vec3u) {
   let p = vec2i(id.xy);
   if (f32(p.x) >= u.hiSize.x || f32(p.y) >= u.hiSize.y) { return; }
   var s = 0u;
+  let a = alphaAt(p);
+  var edge = a > 0.02 && a < 0.98;
   if (insideAt(p)) {
-    if (!insideAt(p + vec2i(1, 0)) || !insideAt(p - vec2i(1, 0)) || !insideAt(p + vec2i(0, 1)) || !insideAt(p - vec2i(0, 1))) {
-      s = idxOf(p) + 1u;
-    }
+    if (!insideAt(p + vec2i(1, 0)) || !insideAt(p - vec2i(1, 0)) || !insideAt(p + vec2i(0, 1)) || !insideAt(p - vec2i(0, 1))) { edge = true; }
   }
+  if (edge) { s = idxOf(p) + 1u; }
   B[idxOf(p)] = s;
 }
 // 2) one jump-flood step: look at 9 neighbours 'step' pixels away, keep the closest seed
@@ -70,11 +73,28 @@ fn insideAt(p: vec2i) -> bool {
   let q = (vec2f(o) + vec2f(0.5)) * u.factor;
   let ip = vec2i(floor(q));
   let s = A[idxOf(ip)];
-  var d = u.spread * u.factor + 1.0;
-  if (s != 0u) { d = length(q - (coordOf(s - 1u) + vec2f(0.5))); }
-  // seeds sit half a pixel inside the edge
-  var sd = d - 0.5;
-  if (insideAt(ip)) { sd = -(d + 0.5); }
+  var sgn = 1.0;
+  if (insideAt(ip)) { sgn = -1.0; }
+  var sd = sgn * (u.spread * u.factor + 1.0);
+  if (s != 0u) {
+    let sp = coordOf(s - 1u);
+    let spi = vec2i(sp);
+    let a = alphaAt(spi);
+    let c = sp + vec2f(0.5);
+    // sub-pixel edge: the coverage gradient gives the edge normal, the coverage itself
+    // how far the edge sits from the seed's center (a = 0.5 -> right through it)
+    let g = vec2f(alphaAt(spi + vec2i(1, 0)) - alphaAt(spi - vec2i(1, 0)), alphaAt(spi + vec2i(0, 1)) - alphaAt(spi - vec2i(0, 1)));
+    if (dot(g, g) > 1e-6) {
+      let n = -normalize(g);
+      let e = c + n * (a - 0.5);
+      let v = q - e;
+      let lv = length(v);
+      // near the edge: distance to the local tangent line; further away: distance to the point
+      sd = mix(dot(v, n), sgn * lv, smoothstep(2.0 * u.factor, 5.0 * u.factor, lv));
+    } else {
+      sd = sgn * (length(q - c) + 0.5 * sgn);
+    }
+  }
   sd = clamp(sd / u.factor, -u.spread, u.spread);
   textureStore(dst, o, vec4f(sd, 0.0, 0.0, 1.0));
 }`;
@@ -607,7 +627,7 @@ let shA   = smoothstep(w, -w, sampleAt(uv - shadowOffset) - outlineWidth);`,
               spawn(rnd(0.22, 0.85) * W, rnd(0.42, 0.66) * H, Math.random() < P.crit, t);
             }
           }
-          const base = Math.max(0.5, H / 900) * 0.62 * P.textSize;
+          const base = Math.max(0.6, H / 700) * 0.78 * P.textSize;
           const layers = [1, 2];
           for (const layer of layers) {
             for (let i = numbers.length - 1; i >= 0; i--) {

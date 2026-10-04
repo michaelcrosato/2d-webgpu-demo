@@ -8,7 +8,7 @@
  * synchronization scope"). We wrap gpu.fullscreen()/glkit.fullscreen() while the scene initialises and,
  * for the pass labelled 'game', swap the self-reference for a 1×1 dummy texture.
  */
-export function withGameInputFix(scene) {
+export function withGameInputFix(scene, { staticGame = false } = {}) {
   const init = scene.init;
   const initGL = scene.initGL;
   const patch = (owner, makeDummy, wrapDraw) => {
@@ -18,7 +18,10 @@ export function withGameInputFix(scene) {
       const fx = orig.call(owner, opts);
       if (opts && opts.label === 'game') {
         const draw = fx.draw.bind(fx);
-        fx.draw = wrapDraw(draw, () => (dummy ??= makeDummy()));
+        const wrapped = wrapDraw(draw, () => (dummy ??= makeDummy()));
+        // staticGame (used under the slow software-GPU test harness): render the game scene only a few times
+        let n = 0;
+        fx.draw = staticGame ? (...args) => (n++ < 3 ? wrapped(...args) : undefined) : wrapped;
       }
       return fx;
     };

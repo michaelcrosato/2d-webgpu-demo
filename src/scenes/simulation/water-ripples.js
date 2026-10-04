@@ -540,13 +540,13 @@ function build(ctx) {
     uniforms,
     include: ['math', 'noise', 'color'],
     resetOn: ['tank'],
-    passes: [{ name: 'sim', format: 'rgba16float', scale: 0.5, iterations: 'steps', code: v.sim }],
+    passes: [{ name: 'sim', format: 'rgba16float', scale: ctx.testMode ? 0.3 : 0.5, iterations: 'steps', code: v.sim }],
     code: v.image,
     // the headless test harness runs on a (very slow) software GPU
-    renderScale: ctx.testMode ? 0.4 : 1,
+    renderScale: ctx.testMode ? 0.3 : 1,
   };
   if (v.input) spec.input = v.input;
-  return withGameInputFix(shaderScene(spec));
+  return withGameInputFix(shaderScene(spec), { staticGame: ctx.testMode });
 }
 
 export default {

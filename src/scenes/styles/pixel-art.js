@@ -14,6 +14,8 @@ function pixelSize(params, ctx) {
   const h = Math.max(1, ctx.height);
   let ps = h / Math.max(16, params.vh);
   if (params.intScale) ps = Math.max(1, Math.round(ps));
+  // headless test harness (software GPU): keep the low-res pass genuinely low-res
+  if (ctx.testMode) ps = Math.max(3, ps);
   return Math.max(1, ps);
 }
 

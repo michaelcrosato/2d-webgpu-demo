@@ -105,7 +105,9 @@ fn colorEscape(r: vec2f, kind: i32) -> vec3f {
   }
   var t = sqrt(max(r.x, 0.0)) * u.density + u.time * u.cycle * 0.1;
   if (kind == 2) { t = t + 0.5; }
-  return fpal(t);
+  // points that escape immediately are far from the set: fade them out so the boundary glows
+  let glow = 1.0 - exp(-max(r.x, 0.0) * 0.11);
+  return fpal(t) * (0.06 + 0.94 * glow);
 }
 
 // Newton's method on z^n - 1: which root does each starting point converge to, and how fast?

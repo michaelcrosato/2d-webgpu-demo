@@ -580,7 +580,6 @@ for (var i = 0; i < 64; i++) {
       },
     ],
     links: [
-      { title: 'Bandwidth-efficient rendering (Marius Bjørge, SIGGRAPH 2015)', url: 'https://community.arm.com/cfs-file/__key/communityserver-blogs-components-weblogfiles/00-00-00-20-66/siggraph2015_2D00_mmg_2D00_marius_2D00_slides.pdf', note: 'the dual Kawase / dual filter blur' },
       { title: 'Efficient Gaussian blur with linear sampling', url: 'https://www.rastergrid.com/blog/2010/09/efficient-gaussian-blur-with-linear-sampling/', note: 'the bilinear trick' },
     ],
   },

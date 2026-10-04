@@ -276,14 +276,14 @@ export default shaderScene({
       label: 'Grading controls',
       kind: 'Abstract',
       note: 'The basic color controls every engine and photo app has. The graph (bottom right) is the <b>tone curve</b>: a grey ramp pushed through your grade, one line per channel. Temperature splits the red and blue lines; contrast bends them into an S.',
-      params: { compare: true, curves: true, exposure: 0, contrast: 1.15, saturation: 1.2, vibrance: 0.2, temperature: 0.25, tint: 0, hue: 0 },
+      params: { compare: true, curves: true, exposure: 0, contrast: 1.15, saturation: 1.2, vibrance: 0.2, temperature: 0.25, tint: 0, hue: 0, lift: 0, gamma: 1, gain: 1, splitAmt: 0, tonemap: 'none' },
     },
     {
       id: 'pro',
       label: 'Lift/gamma/gain & tone mapping',
       kind: 'Abstract',
       note: 'How colorists work: <b>lift</b> moves the shadows, <b>gamma</b> the midtones, <b>gain</b> the highlights; <b>split toning</b> tints shadows and highlights differently (the blockbuster “teal &amp; orange”). Push <b>Exposure</b> up to create values brighter than white, then compare tone mappers.',
-      params: { compare: true, curves: true, exposure: 1.2, tonemap: 'aces', lift: 0.03, gamma: 1.05, gain: 1, shadowTint: '#2f7f8f', highTint: '#ffad6b', splitAmt: 0.6 },
+      params: { compare: true, curves: true, exposure: 1.2, tonemap: 'aces', lift: 0.03, gamma: 1.05, gain: 1, shadowTint: '#2f7f8f', highTint: '#ffad6b', splitAmt: 0.6, contrast: 1, saturation: 1, vibrance: 0, temperature: 0, tint: 0, hue: 0 },
     },
     {
       id: 'moods',

@@ -169,7 +169,7 @@ fn shade(uv: vec2f, px: vec2f) -> vec4f {
     col = mix(col, refl * vec3f(0.85, 0.95, 1.0), fres * 0.8);
   }
   // underside of the surface seen from below: total internal reflection band
-  if (u.mode > 1.5) {
+  if (u.mode > 1.5 && dpos < 72.0) {
     let tir = exp(-dpos / 18.0);
     let mq = vec2f(q.x + off.x, sy + dpos * 2.0 + 30.0);
     col = mix(col, below(mq) * 1.2 + vec3f(0.1, 0.2, 0.22), tir * 0.5);
@@ -579,10 +579,12 @@ col += caustic(q + off * 2.0) * 0.5;`,
         // world texture (game scene above the waterline)
         let gameTex = blank;
         let gameY = [0, 1];
+        // the world texture is sampled by uv, so the test harness can use a cheaper half-res copy
+        const gs = ctx.testMode ? 0.5 : 1;
         if (mode === 1) {
-          gameTex = game.render(ctx.encoder, ctx.time, W, Math.max(8, Math.round(lv)));
+          gameTex = game.render(ctx.encoder, ctx.time, Math.round(W * gs), Math.max(8, Math.round(lv * gs)));
         } else if (mode === 2) {
-          gameTex = game.render(ctx.encoder, ctx.time, W, Math.max(8, Math.round(lv / 0.43)));
+          gameTex = game.render(ctx.encoder, ctx.time, Math.round(W * gs), Math.max(8, Math.round((lv / 0.43) * gs)));
           gameY = [0.25, 0.68];
         }
         // object layer (premultiplied, transparent background)
