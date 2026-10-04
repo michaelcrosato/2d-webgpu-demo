@@ -30,7 +30,10 @@ export const RESERVED_NAMES = new Set(
     'uniform in out inout attribute varying precision lowp mediump highp static const var let fn struct enum union ' +
     'class namespace template this new delete module import export default switch case break continue loop return ' +
     'true false discard override mod set get type match move self pass meta from use ref do of package precise ' +
-    'texture sampler alias private function workgroup storage handle'
+    'texture sampler alias private function workgroup storage handle ' +
+    'auto demote extern final friend impl macro mutable operator protected public register super throw try typedef ' +
+    'typename unless unsized virtual where with yield async await become catch crate debugger decltype explicit ' +
+    'extends finally goto inline interface nil null nullptr typeof unsafe using volatile'
   ).split(' '),
 );
 
